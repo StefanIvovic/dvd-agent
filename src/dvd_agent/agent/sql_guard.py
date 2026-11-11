@@ -83,4 +83,24 @@ def check(sql: str, known_tables: set[str], blocked_columns: set[tuple[str, str]
             if hit:
                 raise UnsafeSQL(f"list the columns you need instead of * ({table} has columns that are not available)")
 
-    return tree.sql(dialect="postgres")
+    return keep_ties(tree).sql(dialect="postgres")
+
+
+def keep_ties(tree: exp.Query) -> exp.Query:
+    """An ordered top-N (ORDER BY ... LIMIT n, or FETCH FIRST n ROWS ONLY) becomes FETCH FIRST n ROWS WITH TIES:
+    the agent answers "top N" with every tied row, and a plain LIMIT silently drops them. Queries with an
+    OFFSET and inner subqueries are left as they are."""
+    lim = tree.args.get("limit")
+    if lim is None or not tree.args.get("order") or tree.args.get("offset") is not None:
+        return tree
+    if isinstance(lim, exp.Fetch):
+        if "TIES" in lim.sql(dialect="postgres").upper():
+            return tree
+        count = lim.args.get("count")
+    else:
+        count = lim.expression
+    if not isinstance(count, exp.Literal) or count.is_string:
+        return tree
+    ties = sqlglot.parse_one(f"SELECT 1 ORDER BY 1 FETCH FIRST {int(count.name)} ROWS WITH TIES", read="postgres")
+    tree.set("limit", ties.args["limit"])
+    return tree

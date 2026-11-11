@@ -37,7 +37,10 @@ class GenerateSQL(dspy.Signature):
       for hours). Do not use EXTRACT(DAY FROM interval): it drops the hours.
     - Match names and titles case-insensitively (ILIKE). Return readable columns (names, titles) plus the
       numbers the answer needs; round money to 2 decimals.
-    - For "top N" / "most" questions, include ties: use RANK() or ORDER BY ... FETCH FIRST N ROWS WITH TIES.
+    - For "top N" / "most" / "least" questions, include ties: use RANK() or ORDER BY <ranking value>
+      FETCH FIRST N ROWS WITH TIES. WITH TIES keeps only rows equal on every ORDER BY column, so order
+      by the ranking value alone (no name or title tie-breakers). Never use LIMIT N or FETCH ... ROWS
+      ONLY for them: that drops tied rows.
     - For lists ("list all ...", "which films ..."), return every matching row: do not add a LIMIT (the
       user gets the rows page by page), ORDER BY a readable column (e.g. title or last name), and select
       only the columns the question needs (titles or names, not descriptions unless asked).
