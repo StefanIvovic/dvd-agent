@@ -64,7 +64,13 @@ uvicorn dvd_agent.api.main:app --port 8001          # web UI at http://127.0.0.1
 streamlit run src/dvd_agent/ui/streamlit_app.py     # Streamlit UI (needs the API running)
 ```
 
-API: `POST /ask` with `{"question": "..."}`; also `/schema`, `/stats`, `/sync`, `/health`. Traces of every question are in MLflow at http://127.0.0.1:5001.
+Long lists are paged, 50 rows per page: the answer shows page 1 and the page count. Then ask "page 2",
+"pages 2, 5", "next page", "last page" or "20 per page" (also in the question: "List all customers, 20 per
+page"). Each page runs the query again (no cached rows) and is printed straight from the database. In the CLI,
+start without a question for a conversation: `python -m dvd_agent.cli`.
+
+API: `POST /ask` with `{"question": "...", "conversation_id": "..."}` (send back the `conversation_id` of the
+previous answer to page its list); also `/schema`, `/stats`, `/sync`, `/health`. Traces of every question are in MLflow at http://127.0.0.1:5001.
 
 The agent's SQL runs as the `dvd_reader` role: SELECT only, read-only transactions, 10 s timeout.
 It has no access to staff usernames and passwords, street addresses, postal codes or phone numbers

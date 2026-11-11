@@ -31,12 +31,13 @@ from langgraph.graph import END, START, StateGraph
 
 from ..config import get_settings
 from ..llm import configure_dspy
-from . import schema, tools
+from . import paging, schema, tools
 from .signatures import DvdQAProgram, load_program
 
 
 class AgentState(TypedDict, total=False):
     question: str
+    page_size: int               # rows per page if the question asked for one ("20 per page"), else PAGE_SIZE
     plan: dict
     films: list[dict]
     results: Annotated[list[dict], operator.add]   # every SQL run (successful and failed), all rounds
@@ -49,6 +50,7 @@ class AgentState(TypedDict, total=False):
     assessment: dict
     refinements: int
     status: str                  # answered | partial | not_found (set by finalize)
+    paged: dict                  # {"qid", "result"}: the cited result with more than one page, if any
     draft_answer: str            # LLM answer before finalize; kept for traces, never shown if not_found
     steps: Annotated[list[dict], operator.add]
 
@@ -107,7 +109,7 @@ def build_graph(program: DvdQAProgram | None = None):
             cannot = (p.cannot_answer or "").strip() if not queries else ""
             if not queries:
                 break
-            round_results = [tools.run_sql(q, question) for q in queries]
+            round_results = [tools.run_sql(q, question, state.get("page_size")) for q in queries]
             results += round_results
             if all("error" not in r for r in round_results):
                 break
@@ -184,9 +186,16 @@ def build_graph(program: DvdQAProgram | None = None):
                                         ("says_not_in_sources", bool(not_in_src))) if hit]
         else:
             status, final, reasons = "answered", draft, []
+        paged = None
+        if status != "not_found":   # a cited result with more pages: say so, so the user can ask for them
+            cmap = state.get("citation_map", {})
+            hit = next((c for c in cited_sources(draft, cmap) if c["type"] == "sql" and c["pages"] > 1), None)
+            if hit:
+                paged = {"qid": hit["id"], "result": hit}
+                final = final + "\n\n" + paging.footer(hit, hit["id"])
         reason = ",".join(reasons)
         _tag_trace(state["question"], status, reason, not_in_src, a, state.get("refinements", 0), cannot)
-        return {"status": status, "answer": final, "draft_answer": draft,
+        return {"status": status, "answer": final, "draft_answer": draft, "paged": paged,
                 **_step("finalize", t0, status=status, reason=reason or None, not_in_sources=not_in_src or None)}
 
     g = StateGraph(AgentState)
@@ -249,17 +258,31 @@ def cited_sources(answer: str, cmap: dict) -> list[dict]:
     return [{"id": i, **cmap[i]} for i in ids if i in cmap]
 
 
-def ask(question: str) -> dict[str, Any]:
-    state = get_agent().invoke({"question": question})
+def ask(question: str, conversation_id: str | None = None) -> dict[str, Any]:
+    """Answers a question. With a conversation_id, "page 2" / "20 per page" pages the last listed result
+    (agent/paging.py: the query runs again, the rows are printed directly, no LLM)."""
+    cmd = paging.parse_command(question)
+    if cmd is not None and conversation_id:
+        return {"question": question, "conversation_id": conversation_id,
+                **_traced_page_request(cmd, conversation_id, question)}
+    llm_question, size = paging.split_question(question)
+    state = get_agent().invoke({"question": llm_question, **({"page_size": size} if size else {})})
     status = state.get("status", "answered")
+    paged = state.get("paged")
+    if paged:
+        paging.remember(conversation_id, paged["result"], paged["qid"], question)
+    else:
+        paging.forget(conversation_id)   # a new question without pages: "page 2" no longer refers to the old list
     return {
         "question": question,
+        "conversation_id": conversation_id,
         "status": status,   # answered | partial | not_found
         "answer": state.get("answer", ""),
         "citations": [] if status == "not_found"
         else cited_sources(state.get("answer", ""), state.get("citation_map", {})),
         # every query that ran, with its rows (the UI shows them; errors included for transparency)
-        "sql": [{k: r[k] for k in ("sql", "columns", "rows", "row_count", "truncated", "error") if k in r}
+        "sql": [{k: r[k] for k in ("sql", "columns", "rows", "row_count", "page", "pages", "page_size", "error")
+                 if k in r}
                 for r in state.get("results", [])],
         "films": [{k: f[k] for k in ("film_id", "title", "description", "score")} for f in state.get("films", [])],
         "plan": state.get("plan"),
@@ -267,3 +290,15 @@ def ask(question: str) -> dict[str, Any]:
                        if status != "not_found" or k in ("grounded", "complete", "answer_found")},
         "steps": state.get("steps", []),
     }
+
+
+def _traced_page_request(cmd: dict, conversation_id: str, question: str) -> dict:
+    try:
+        import mlflow
+
+        @mlflow.trace(name="page_request", span_type="CHAIN")
+        def run(question: str, command: dict) -> dict:
+            return paging.answer_command(command, conversation_id)
+        return run(question, cmd)
+    except ImportError:
+        return paging.answer_command(cmd, conversation_id)

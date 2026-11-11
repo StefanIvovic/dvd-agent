@@ -2,7 +2,8 @@
 
 The database is the real boundary (dvd_reader: SELECT only, read-only, 10 s timeout). This guard
 rejects anything that is not a single read query early, with a clear message, blocks hidden
-columns, checks table names and caps the row count.
+columns and checks table names. It adds no LIMIT: results are paged (agent/paging.py), so every
+row stays reachable.
 """
 from __future__ import annotations
 
@@ -27,8 +28,8 @@ def clean(sql: str) -> str:
     return sql.rstrip(";").strip()
 
 
-def check(sql: str, known_tables: set[str], blocked_columns: set[tuple[str, str]], row_limit: int) -> str:
-    """Returns the SQL to run (with a LIMIT), or raises UnsafeSQL."""
+def check(sql: str, known_tables: set[str], blocked_columns: set[tuple[str, str]]) -> str:
+    """Returns the SQL to run (normalized), or raises UnsafeSQL."""
     sql = clean(sql)
     if not sql:
         raise UnsafeSQL("empty SQL")
@@ -82,13 +83,4 @@ def check(sql: str, known_tables: set[str], blocked_columns: set[tuple[str, str]
             if hit:
                 raise UnsafeSQL(f"list the columns you need instead of * ({table} has columns that are not available)")
 
-    limit = tree.args.get("limit")
-    current = None
-    if limit is not None:
-        try:
-            current = int(limit.expression.name)
-        except (AttributeError, ValueError, TypeError):
-            current = None
-    if current is None or current > row_limit:
-        tree = tree.limit(row_limit)
     return tree.sql(dialect="postgres")

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -47,13 +48,15 @@ app = FastAPI(title="DVD Rental Agent", version="0.1.0", lifespan=lifespan)
 
 
 class AskRequest(BaseModel):
-    question: str = Field(min_length=3, examples=["Which store made more revenue in 2007?"])
+    question: str = Field(min_length=1, examples=["Which store made more revenue in 2007?"])
+    # send back the conversation_id of the previous answer so "page 2" / "20 per page" page its list
+    conversation_id: str | None = Field(default=None, max_length=100)
 
 
 @app.post("/ask")
 def ask_endpoint(req: AskRequest) -> dict:
     # sync endpoint -> FastAPI runs it in a worker thread; LangGraph + DSPy calls are blocking
-    result = ask(req.question)
+    result = ask(req.question, req.conversation_id or uuid.uuid4().hex)
     result["trace_id"] = mlflow.get_last_active_trace_id()
     return result
 

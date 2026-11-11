@@ -25,6 +25,12 @@ except Exception as e:
 
 if "history" not in st.session_state:
     st.session_state.history = []
+    st.session_state.conversation = None   # sent back so "page 2" / "20 per page" page the last list
+with st.sidebar:
+    st.caption("After a long list, ask “page 2”, “pages 2, 3”, “next page” or “20 per page”.")
+    if st.button("New conversation"):
+        st.session_state.history, st.session_state.conversation = [], None
+        st.rerun()
 
 
 def chart(df: pd.DataFrame) -> None:
@@ -41,7 +47,8 @@ def show(d: dict) -> None:
     st.markdown(d["answer"])
     for c in d["citations"]:
         if c["type"] == "sql":
-            with st.expander(f"[{c['id']}] {c['row_count']} rows", expanded=True):
+            page = f" · page {c['page']} of {c['pages']}" if c.get("pages", 1) > 1 else ""
+            with st.expander(f"[{c['id']}] {c['row_count']} rows{page}", expanded=True):
                 st.code(c["sql"], language="sql")
                 df = pd.DataFrame(c["rows"], columns=c["columns"])
                 st.dataframe(df, hide_index=True)
@@ -70,9 +77,11 @@ if q := st.chat_input("Ask about films, actors, customers, rentals, payments…"
     with st.chat_message("assistant"):
         with st.spinner("Working (local model, this can take a minute)…"):
             try:
-                r = httpx.post(f"{API}/ask", json={"question": q}, timeout=600)
+                r = httpx.post(f"{API}/ask", json={"question": q,
+                                                   "conversation_id": st.session_state.conversation}, timeout=600)
                 r.raise_for_status()
                 d = r.json()
+                st.session_state.conversation = d.get("conversation_id")
             except Exception as e:
                 st.error(f"Request failed: {e}")
                 st.stop()

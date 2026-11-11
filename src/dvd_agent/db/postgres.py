@@ -59,8 +59,7 @@ class SqlResult:
     sql: str
     columns: list[str]
     rows: list[dict]
-    row_count: int          # rows returned (capped by the LIMIT the guard adds)
-    truncated: bool         # True if the row limit was hit
+    row_count: int          # rows returned
 
 
 def _jsonable(v):
@@ -75,13 +74,14 @@ def _jsonable(v):
     return v
 
 
-def run_readonly(sql: str, limit: int) -> SqlResult:
-    """Runs one guarded SELECT as dvd_reader. Raises psycopg errors (the agent shows them to the LLM)."""
+def run_readonly(sql: str) -> SqlResult:
+    """Runs one guarded SELECT as dvd_reader. Raises psycopg errors (the agent shows them to the LLM).
+    Fetches every row the SQL returns: callers page it with LIMIT/OFFSET (agent/paging.py)."""
     with reader() as c:
         cur = c.execute(sql)
         cols = [d.name for d in cur.description or []]
         rows = [{k: _jsonable(v) for k, v in r.items()} for r in cur.fetchall()]
-    return SqlResult(sql, cols, rows, len(rows), len(rows) >= limit)
+    return SqlResult(sql, cols, rows, len(rows))
 
 
 # ---------------------------------------------------------------- schema (read live)

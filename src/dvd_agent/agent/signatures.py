@@ -38,6 +38,9 @@ class GenerateSQL(dspy.Signature):
     - Match names and titles case-insensitively (ILIKE). Return readable columns (names, titles) plus the
       numbers the answer needs; round money to 2 decimals.
     - For "top N" / "most" questions, include ties: use RANK() or ORDER BY ... FETCH FIRST N ROWS WITH TIES.
+    - For lists ("list all ...", "which films ..."), return every matching row: do not add a LIMIT (the
+      user gets the rows page by page), ORDER BY a readable column (e.g. title or last name), and select
+      only the columns the question needs (titles or names, not descriptions unless asked).
     - film_hits are only the top matches of a plot/theme search, not every matching film. If the theme
       is a concrete word or phrase that would appear in the text (robot, shark, Berlin, "mad scientist"),
       filter with film.description ILIKE '%word%' (and title if relevant) so all films are covered. Use
@@ -66,8 +69,9 @@ class AnswerQuestion(dspy.Signature):
     periods. When results are tied, say so and list the tied items. For "top N" / "N shortest" style
     questions, if items beyond the Nth have the same value as the Nth, the top N is cut inside a tie:
     say so and list every tied item (or say how many are tied if there are many), not just N of them.
-    A period outside the date range of the data has no data; say that, do not report it as 0. If a result reached the row limit
-    or shows fewer rows than it has, say the list is partial. If the sources do not contain the answer,
+    A period outside the date range of the data has no data; say that, do not report it as 0. If a result is paged ("page 1 shown"),
+    give the total row count and, for a list, list every row of page 1; a page note is added for the
+    user automatically, so do not call the list partial or incomplete. If the sources do not contain the answer,
     say what is missing instead of guessing. If the question asks for an exact figure the data does not
     have (e.g. the revenue for a month with no payments), say so first, then give the closest related
     figure with its citation. If the question states something the results contradict (a count, a
@@ -87,7 +91,9 @@ class AssessAnswer(dspy.Signature):
       information is grounded.
     - 'complete' is false if part of the question is unanswered, or a SQL result does not actually
       answer what was asked (wrong filter, wrong period, missing grouping). When the results show a
-      tie, listing all tied items is complete, even if the question asked for a single one.
+      tie, listing all tied items is complete, even if the question asked for a single one. A paged
+      result ("page 1 shown") is complete when the answer gives the total and lists page 1: the user
+      can ask for every other page, so never ask a new query for the remaining rows or pages.
     - 'answer_found' is false if the sources contain no information that answers the question at all
       (e.g. the answer only says the information is not available). It is true if the answer says the
       exact figure is not available but gives a related figure from the sources; 'complete' is then false.

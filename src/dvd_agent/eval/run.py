@@ -5,13 +5,14 @@ python -m dvd_agent.eval.run --split test --run-name test-v1
 python -m dvd_agent.eval.run --split dev --expect not_found --limit 5
 
 Each question is answered once (not_found / correction questions --repeats times, default 3, to
-check the agent refuses reliably). Expected values come from each line's gold_sql, run at eval time.
+check the agent refuses reliably; --repeat-all repeats every question). Expected values come from each line's gold_sql, run at eval time.
 """
 from __future__ import annotations
 
 import argparse
 import sys
 import time
+import uuid
 
 import mlflow
 import pandas as pd
@@ -21,13 +22,14 @@ from ..config import get_settings
 from ..llm import ensure_embed_model_loaded
 from ..tracing import init_mlflow
 from . import cases
-from .metrics import GoldError, check, gold, has_citation
+from .metrics import GoldError, check, check_pages, gold, gold_list, has_citation
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", choices=["dev", "test"], default="dev")
     ap.add_argument("--repeats", type=int, default=3, help="runs per not_found / correction question")
+    ap.add_argument("--repeat-all", action="store_true", help="repeat answer questions too")
     ap.add_argument("--expect", choices=sorted(cases.EXPECTS), help="only questions with this expect")
     ap.add_argument("--id", action="append", help="only these ids (repeatable)")
     ap.add_argument("--limit", type=int)
@@ -44,14 +46,14 @@ def main() -> None:
     rows = rows[: a.limit] if a.limit else rows
     bad = []
     for r in rows:                          # every gold_sql must work before the agent runs
-        if r["expect"] == "answer":
+        if r["expect"] in ("answer", "pages"):
             try:
-                gold(r)
+                gold(r) if r["expect"] == "answer" else gold_list(r)
             except GoldError as e:
                 bad.append(f"line {r['line']}: {e}")
     if bad:
         raise SystemExit("gold_sql problems:\n  " + "\n  ".join(bad))
-    runs = [(r, i) for r in rows for i in range(a.repeats if r["expect"] != "answer" else 1)]
+    runs = [(r, i) for r in rows for i in range(a.repeats if a.repeat_all or r["expect"] not in ("answer", "pages") else 1)]
     print(f"{a.split}: {len(rows)} questions, {len(runs)} agent runs (~{len(runs) * 25 / 60:.0f} min)", flush=True)
 
     ensure_embed_model_loaded()
@@ -60,7 +62,7 @@ def main() -> None:
     s = get_settings()
     out = []
     with mlflow.start_run(run_name=a.run_name or a.split, tags={"split": a.split}):
-        mlflow.log_params({"split": a.split, "n_questions": len(rows), "n_runs": len(runs), "repeats": a.repeats,
+        mlflow.log_params({"split": a.split, "n_questions": len(rows), "n_runs": len(runs), "repeats": a.repeats, "repeat_all": a.repeat_all,
                            "expect_filter": a.expect or "all", "llm_provider": s.llm_provider,
                            "llm_model": s.llm_model, "embed_model": s.embed_model,
                            "sql_retries": s.sql_retries, "film_search_k": s.film_search_k,
@@ -71,8 +73,15 @@ def main() -> None:
             base = {"line": r["line"], "id": r.get("id", ""), "question": r["question"], "expect": r["expect"],
                     "repeat": rep}
             try:
-                res = ask(r["question"])
-                ok, reason = check(r, res["answer"], res["status"])
+                if r["expect"] == "pages":   # the question, then each follow-up in the same conversation
+                    conv = uuid.uuid4().hex
+                    turns = [ask(r["question"], conv)] + [ask(f["say"], conv) for f in r.get("follow_ups", [])]
+                    ok, reason = check_pages(r, turns)
+                    res = {**turns[0], "answer": "\n\n---\n\n".join(t["answer"] for t in turns),
+                           "sql": [q for t in turns for q in t["sql"]]}
+                else:
+                    res = ask(r["question"])
+                    ok, reason = check(r, res["answer"], res["status"])
                 sql = " ;; ".join(q["sql"] for q in res["sql"] if "error" not in q)
                 out.append({**base, "status": res["status"], "passed": ok, "reason": reason,
                             "cited": has_citation(res["answer"]), "seconds": round(time.time() - t0, 1),
@@ -109,6 +118,11 @@ def summarize(df: pd.DataFrame) -> dict:
         m["false_refusal_rate"] = (ans["status"] == "not_found").mean()   # said "not found" to an answerable question
         m["partial_rate"] = (ans["status"] == "partial").mean()
         m["cited_rate"] = ans["cited"].mean()
+        if ans["repeat"].nunique() > 1:
+            m["answer_consistency"] = ans.groupby("question")["passed"].nunique().eq(1).mean()
+    pg_ = df[df["expect"] == "pages"]
+    if len(pg_):
+        m["pages_pass_rate"] = pg_["passed"].mean()
     for e in ("not_found", "correction"):
         sub = df[df["expect"] == e]
         if len(sub):

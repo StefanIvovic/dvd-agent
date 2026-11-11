@@ -6,12 +6,15 @@ test  held out: run it only to report a score. If a test failure makes you chang
 
 Line format (see data/eval/README.md):
   question    required
-  expect      required: "answer" | "not_found" | "correction"
+  expect      required: "answer" | "not_found" | "correction" | "pages"
   gold_sql    expect=answer: SQL whose result the answer must contain (run at eval time, so it follows the data)
   text_col    column(s) of gold_sql whose values (every row) must appear in the answer
   number_col  column(s) of gold_sql whose values (every row) must appear as numbers in the answer
   tolerance   relative tolerance for numbers (default 0.005)
   contains    expect=correction: any one of these phrases shows the premise was corrected
+  follow_ups  expect=pages: paging requests in the same conversation, e.g.
+              [{"say": "20 per page", "pages": [1], "size": 20}, {"say": "pages 3, 5", "pages": [3, 5]}]
+  size        expect=pages: rows per page the question itself asks for (default 50)
   id, why     notes for you; not used for scoring
 """
 from __future__ import annotations
@@ -20,7 +23,8 @@ import json
 from pathlib import Path
 
 ROOT = Path("data/eval")
-EXPECTS = {"answer", "not_found", "correction"}
+EXPECTS = {"answer", "not_found", "correction", "pages"}
+PAGE_SIZE = 50   # the agent's default (config.page_size); expect=pages lines are graded against it
 MAX_GOLD_ROWS = 20
 
 
@@ -58,7 +62,7 @@ def load(split: str) -> list[dict]:
                 problems.append(f"{where} same question as line {seen[k]}")
             seen.setdefault(k, i)
         for f in ("text_col", "number_col", "contains"):
-            if f in r:
+            if f in r and not (f == "text_col" and r.get("expect") == "pages"):
                 r[f] = _as_list(r[f])
         r["line"] = i
         rows.append(r)
@@ -85,8 +89,19 @@ def _check_row(r: dict) -> list[str]:
             out.append("expect=answer needs 'gold_sql'")
         if not (r.get("text_col") or r.get("number_col")):
             out.append("expect=answer needs 'text_col' and/or 'number_col'")
+    elif e == "pages":
+        if not r.get("gold_sql"):
+            out.append("expect=pages needs 'gold_sql' (every row of the full list)")
+        if not isinstance(r.get("text_col"), str):
+            out.append("expect=pages needs one 'text_col' (the value that identifies a row)")
+        if "number_col" in r:
+            out.append("expect=pages takes no 'number_col'")
+        for f in r.get("follow_ups", []):
+            if not (isinstance(f, dict) and isinstance(f.get("say"), str) and f.get("pages")
+                    and all(isinstance(p, int) and p > 0 for p in f["pages"])):
+                out.append(f"follow_up {f!r} needs 'say' and 'pages' (page numbers)")
     elif any(k in r for k in ("gold_sql", "text_col", "number_col")):
-        out.append("'gold_sql', 'text_col' and 'number_col' only go with expect=answer")
+        out.append("'gold_sql', 'text_col' and 'number_col' only go with expect=answer or pages")
     if e == "correction" and not r.get("contains"):
         out.append("expect=correction needs 'contains' (words that show the premise was corrected)")
     if e == "not_found" and "contains" in r:

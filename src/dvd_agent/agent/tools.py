@@ -11,7 +11,7 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from ..config import get_settings
 from ..db import postgres as pg
 from ..llm import embed_query
-from . import schema, sql_guard
+from . import paging, schema, sql_guard
 
 
 # ------------------------------------------------------------------ film search
@@ -48,19 +48,19 @@ def search_films(queries: Sequence[str], k: int | None = None) -> list[dict]:
 
 
 # ------------------------------------------------------------------ SQL
-def run_sql(sql: str, question: str) -> dict:
-    """Guard + run. Returns {"sql", "columns", "rows", "row_count", "truncated"} or {"sql", "error"}."""
+def run_sql(sql: str, question: str, page_size: int | None = None) -> dict:
+    """Guard + run, page 1. Returns paging.run_paged's dict (rows of page 1, row_count = all rows,
+    page, pages, page_size) or {"sql", "error"}. page_size: PAGE_SIZE unless the user asked for one."""
     s = get_settings()
     try:
-        safe = sql_guard.check(sql, schema.table_names(), schema.blocked_columns(question), s.sql_row_limit)
+        safe = sql_guard.check(sql, schema.table_names(), schema.blocked_columns(question))
     except sql_guard.UnsafeSQL as e:
         return {"sql": sql_guard.clean(sql), "error": str(e)}
     try:
-        r = pg.run_readonly(safe, s.sql_row_limit)
+        return paging.run_paged(safe, page_size or s.page_size)
     except Exception as e:  # syntax/semantic errors, timeout: shown to the LLM for a retry
         msg = str(e).strip().splitlines()
         return {"sql": safe, "error": f"{type(e).__name__}: {' '.join(msg[:3])}"[:500]}
-    return {"sql": safe, "columns": r.columns, "rows": r.rows, "row_count": r.row_count, "truncated": r.truncated}
 
 
 # ------------------------------------------------------------------ formatting sources for the LLM
@@ -76,17 +76,19 @@ def _table(columns: list[str], rows: list[dict]) -> str:
 
 def format_sources(results: list[dict], films: list[dict]) -> tuple[str, dict]:
     """Returns (prompt text, citation map id -> metadata). [Q#] = a SQL result, [S#] = a film search hit."""
-    n_rows = get_settings().sql_rows_to_llm
     parts, cmap = [], {}
     for i, r in enumerate([r for r in results if "error" not in r], 1):
         qid = f"Q{i}"
-        shown = r["rows"][:n_rows]
-        more = f"\n({r['row_count'] - len(shown)} more rows not shown)" if r["row_count"] > len(shown) else ""
-        limit = " (row limit reached; there may be more rows)" if r["truncated"] else ""
-        cmap[qid] = {"type": "sql", "sql": r["sql"], "columns": r["columns"], "row_count": r["row_count"],
-                     "rows": r["rows"][:n_rows]}
-        parts.append(f"[{qid}] SQL: {r['sql']}\nResult: {r['row_count']} rows{limit}\n"
-                     f"{_table(r['columns'], shown) if r['rows'] else '(no rows)'}{more}")
+        cmap[qid] = {"type": "sql", **{k: r[k] for k in ("sql", "columns", "rows", "row_count", "page", "pages",
+                                                          "page_size", "first_row", "last_row")}}
+        if r["pages"] > 1:
+            info = (f"{r['row_count']} rows in {r['pages']} pages of {r['page_size']}; page 1 shown "
+                    f"(rows 1-{r['last_row']}). The user sees a note with the page count and can ask for "
+                    f"any other page, so list the rows of this page; the other pages are not missing.")
+        else:
+            info = f"{r['row_count']} rows"
+        parts.append(f"[{qid}] SQL: {r['sql']}\nResult: {info}\n"
+                     f"{_table(r['columns'], r['rows']) if r['rows'] else '(no rows)'}")
     for i, f in enumerate(films, 1):
         sid = f"S{i}"
         cmap[sid] = {"type": "film", "film_id": f["film_id"], "title": f["title"], "description": f["description"]}

@@ -34,8 +34,7 @@ class Settings(BaseSettings):
     mlflow_experiment: str = "dvd-agent"
     api_url: str = "http://127.0.0.1:8001"   # used by the Streamlit UI
 
-    sql_row_limit: int = 200             # LIMIT added to every query
-    sql_rows_to_llm: int = 50            # rows of each result shown to the answer step (total count always given)
+    page_size: int = 50                  # rows per page; the answer step sees page 1, the user can ask for any page
     sql_retries: int = 2                 # regenerate the SQL with the error message this many times
     film_search_k: int = 10
     max_refinements: int = 1             # extra SQL round when the self-check says incomplete

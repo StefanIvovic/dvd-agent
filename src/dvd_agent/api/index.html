@@ -25,6 +25,7 @@
   .src code.id { color:var(--accent); }
   details { font-size:12px; color:var(--muted); margin-top:8px; }
   pre { white-space:pre-wrap; background:var(--bg); padding:8px; border-radius:4px; font-size:12px; }
+  .rowswrap { max-height:420px; overflow:auto; margin-top:4px; }
   table.rows { border-collapse:collapse; font-size:12px; margin-top:4px; }
   table.rows td, table.rows th { border:1px solid var(--line); padding:2px 6px; text-align:left; }
   .status { display:inline-block; font-size:11px; padding:1px 7px; border-radius:10px; margin-bottom:8px; }
@@ -36,7 +37,8 @@
 <body>
 <main>
   <h1>DVD Rental Agent</h1>
-  <p class="sub" id="stats">Loading…</p>
+  <p class="sub"><span id="stats">Loading…</span> · after a long list, ask “page 2”, “pages 2, 3” or “20 per page” ·
+    <a href="#" id="new">new conversation</a></p>
   <form id="f">
     <textarea id="q" placeholder="e.g. Which film category brought in the most revenue in April 2007?" required></textarea>
     <button id="b">Ask</button>
@@ -46,9 +48,13 @@
 <script>
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const md = s => DOMPurify.sanitize(marked.parse(s));
-const table = (cols, rows) => `<table class="rows"><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>` +
-  rows.slice(0, 20).map(r => `<tr>${cols.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("") + `</table>` +
-  (rows.length > 20 ? `<div class="meta">${rows.length - 20} more rows</div>` : "");
+// a result is one page of rows (all of them when it fits on one page)
+const table = (cols, rows) => `<div class="rowswrap"><table class="rows"><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>` +
+  rows.map(r => `<tr>${cols.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("") + `</table></div>`;
+const pageInfo = c => c.pages > 1 ? ` · page ${c.page} of ${c.pages} (${c.page_size} per page)` : "";
+let conversation = null;   // sent back with each question, so "page 2" refers to the last list
+document.getElementById("new").onclick = e => { e.preventDefault(); conversation = null;
+  document.getElementById("out").innerHTML = ""; };
 fetch("/stats").then(r => r.json()).then(s => {
   document.getElementById("stats").textContent = `${s.films} films · ${s.with_embedding} embedded for search` +
     (s.stale ? ` · ${s.stale} changed, re-embedding` : "");
@@ -61,11 +67,12 @@ document.getElementById("f").onsubmit = async e => {
   card.innerHTML = `<div class="q">${esc(q)}</div><div class="a">Working (local model, this can take a minute)…</div>`;
   document.getElementById("out").prepend(card);
   try {
-    const r = await fetch("/ask", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:q})});
+    const r = await fetch("/ask", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:q, conversation_id:conversation})});
     const d = await r.json();
     if (!r.ok) throw new Error(JSON.stringify(d));
+    conversation = d.conversation_id;
     const srcs = d.citations.map(c => c.type === "sql"
-      ? `<div><code class="id">[${c.id}]</code> ${c.row_count} rows<pre>${esc(c.sql)}</pre>${table(c.columns, c.rows)}</div>`
+      ? `<div><code class="id">[${c.id}]</code> ${c.row_count} rows${pageInfo(c)}<pre>${esc(c.sql)}</pre>${table(c.columns, c.rows)}</div>`
       : `<div><code class="id">[${c.id}]</code> film ${c.film_id} · ${esc(c.title)} — ${esc(c.description)}</div>`).join("");
     const steps = d.steps.map(s => `${s.node} ${s.seconds}s`).join(" → ");
     const label = {answered: "answered", partial: "partly answered", not_found: "not in the data"}[d.status] || d.status;
