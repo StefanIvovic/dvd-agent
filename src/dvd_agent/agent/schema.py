@@ -1,8 +1,8 @@
 """Schema description for the SQL step, read live from the database (so new tables/columns appear).
 
-Cached for SCHEMA_CACHE_SECONDS. Columns that are never needed (password hash, picture bytes, the
-tsvector) are hidden and blocked; personal contact columns are only shown when the question asks for
-them (see `describe`).
+Cached for SCHEMA_CACHE_SECONDS. Columns dvd_reader has no SELECT grant on (staff login, street
+address, phone: see sql/init.sql) and columns that are never needed (picture bytes, the tsvector) are
+hidden and blocked; emails are only shown when the question asks for them (see `describe`).
 """
 from __future__ import annotations
 
@@ -14,12 +14,10 @@ from ..config import get_settings
 from ..db import postgres as pg
 
 INTERNAL_TABLES = {"film_embedding"}                       # the agent's own data, not the business schema
-HIDDEN_COLUMNS = {("staff", "password"), ("staff", "picture"), ("film", "fulltext")}
-CONTACT_COLUMNS = {("customer", "email"), ("staff", "email"), ("address", "address"), ("address", "address2"),
-                   ("address", "phone"), ("address", "postal_code"), ("customer_list", "address"),
-                   ("customer_list", "phone"), ("customer_list", "zip code"), ("staff_list", "address"),
-                   ("staff_list", "phone"), ("staff_list", "zip code")}
-_CONTACT_WORDS = re.compile(r"\b(e-?mails?|phones?|addresse?s?|street|postal|zip|contact)\b", re.I)
+# never needed; columns without a dvd_reader grant are added from the database (has_column_privilege)
+HIDDEN_COLUMNS = {("staff", "password"), ("staff", "username"), ("staff", "picture"), ("film", "fulltext")}
+CONTACT_COLUMNS = {("customer", "email"), ("staff", "email")}
+_CONTACT_WORDS = re.compile(r"\b(e-?mails?|contact)\b", re.I)
 _VALUE_LISTS = [("category", "name"), ("language", "name"), ("country", "country")]
 
 _lock = threading.Lock()
@@ -51,7 +49,8 @@ def _load() -> dict:
 
 def blocked_columns(question: str = "") -> set[tuple[str, str]]:
     """Columns the guard rejects for this question."""
-    return HIDDEN_COLUMNS | (set() if _CONTACT_WORDS.search(question) else CONTACT_COLUMNS)
+    no_grant = {(c["table_name"], c["column_name"]) for c in _load()["columns"] if not c["readable"]}
+    return HIDDEN_COLUMNS | no_grant | (set() if _CONTACT_WORDS.search(question) else CONTACT_COLUMNS)
 
 
 def table_names() -> set[str]:

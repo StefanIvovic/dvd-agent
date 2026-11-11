@@ -86,8 +86,8 @@ def run_readonly(sql: str, limit: int) -> SqlResult:
 
 # ---------------------------------------------------------------- schema (read live)
 def schema_rows() -> dict:
-    """Tables/views of the public schema that do not belong to an extension (PostGIS, pg_stat_statements),
-    with columns, primary keys and foreign keys."""
+    """Tables/views of the public schema that do not belong to an extension (PostGIS, pg_stat_statements)
+    and that dvd_reader may read, with columns (readable = dvd_reader has SELECT on it), PKs and FKs."""
     with conn() as c:
         rels = c.execute("""
             SELECT cl.relname AS name, CASE cl.relkind WHEN 'v' THEN 'view' ELSE 'table' END AS kind,
@@ -95,10 +95,12 @@ def schema_rows() -> dict:
             FROM pg_class cl JOIN pg_namespace n ON n.oid = cl.relnamespace
             WHERE n.nspname = 'public' AND cl.relkind IN ('r', 'v', 'p')
               AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = cl.oid AND d.deptype = 'e')
-              AND has_table_privilege('dvd_reader', cl.oid, 'SELECT')
+              AND has_any_column_privilege('dvd_reader', cl.oid, 'SELECT')   -- also tables with column-only grants
             ORDER BY cl.relname""").fetchall()
         cols = c.execute("""
-            SELECT table_name, column_name, data_type, udt_name
+            SELECT table_name, column_name, data_type, udt_name,
+                   has_column_privilege('dvd_reader', format('%I.%I', table_schema, table_name),
+                                        column_name, 'SELECT') AS readable
             FROM information_schema.columns WHERE table_schema = 'public'
             ORDER BY table_name, ordinal_position""").fetchall()
         fks = c.execute("""

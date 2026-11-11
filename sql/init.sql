@@ -27,3 +27,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO dvd_reader; 
 ALTER ROLE dvd_reader SET default_transaction_read_only = on;
 ALTER ROLE dvd_reader SET statement_timeout = '10s';
 ALTER ROLE dvd_reader SET idle_in_transaction_session_timeout = '30s';
+
+-- Columns the agent may never read, enforced by Postgres (column-level grants), not only by the SQL guard:
+-- staff login (username, password hash) and street address / phone. A query touching them, or a whole-row
+-- reference such as row_to_json(staff), fails with "permission denied". district, city_id and address_id
+-- stay readable, so city/country questions work.
+REVOKE SELECT ON staff, address FROM dvd_reader;
+GRANT SELECT (staff_id, first_name, last_name, address_id, email, store_id, active, picture, last_update)
+    ON staff TO dvd_reader;
+GRANT SELECT (address_id, district, city_id, last_update) ON address TO dvd_reader;
+-- These views run with their owner's rights and show address, zip code and phone: not for the agent.
+REVOKE SELECT ON customer_list, staff_list FROM dvd_reader;
