@@ -25,7 +25,7 @@
 {"id": "t25", "question": "How much revenue came from Comedy films?", "expect": "answer", "gold_sql": "SELECT sum(p.amount) AS v FROM payment p JOIN rental r USING (rental_id) JOIN inventory i USING (inventory_id) JOIN film_category fc USING (film_id) JOIN category c USING (category_id) WHERE c.name = 'Comedy'", "number_col": "v"}
 {"id": "t26", "question": "What is the average rental rate for each film rating?", "expect": "answer", "gold_sql": "SELECT rating, round(avg(rental_rate), 2) AS v FROM film GROUP BY rating", "number_col": "v"}
 {"id": "t27", "question": "How many films cost 0.99 to rent?", "expect": "answer", "gold_sql": "SELECT count(*) AS n FROM film WHERE rental_rate = 0.99", "number_col": "n"}
-{"id": "t28", "question": "What are the 3 shortest films?", "expect": "answer", "gold_sql": "SELECT title, length FROM film ORDER BY length ASC FETCH FIRST 3 ROWS WITH TIES", "text_col": "title", "why": "ties at 46 minutes"}
+{"id": "t28", "question": "Which 3 customers made the fewest rentals?", "expect": "answer", "gold_sql": "SELECT c.first_name || ' ' || c.last_name AS name, count(*) AS n FROM rental r JOIN customer c USING (customer_id) GROUP BY c.customer_id, name ORDER BY n ASC FETCH FIRST 3 ROWS WITH TIES", "text_col": "name", "why": "three-way tie for third place at 14 rentals"}
 {"id": "t29", "question": "How many customers rented a film in both store 1 and store 2?", "expect": "answer", "gold_sql": "SELECT count(*) AS n FROM (SELECT r.customer_id FROM rental r JOIN inventory i USING (inventory_id) GROUP BY 1 HAVING count(DISTINCT i.store_id) = 2) x", "number_col": "n"}
 {"id": "t30", "question": "How many rentals did store 1 make in May 2005?", "expect": "answer", "gold_sql": "SELECT count(*) AS n FROM rental r JOIN inventory i USING (inventory_id) WHERE i.store_id = 1 AND r.rental_date >= '2005-05-01' AND r.rental_date < '2005-06-01'", "number_col": "n"}
 {"id": "t31", "question": "Which actor has appeared in the most Horror films?", "expect": "answer", "gold_sql": "SELECT a.first_name || ' ' || a.last_name AS name, count(*) AS n FROM film_actor fa JOIN actor a USING (actor_id) JOIN film_category fc USING (film_id) JOIN category c USING (category_id) WHERE c.name = 'Horror' GROUP BY a.actor_id ORDER BY n DESC FETCH FIRST 1 ROWS WITH TIES", "text_col": "name"}
@@ -45,7 +45,7 @@
 {"id": "t45", "question": "How many tickets did Academy Dinosaur sell in cinemas?", "expect": "not_found", "why": "no cinema data"}
 {"id": "t46", "question": "Which studio produced the film Alien Center?", "expect": "not_found", "why": "no studio column"}
 {"id": "t47", "question": "What is the Rotten Tomatoes score of Ace Goldfinger?", "expect": "not_found", "why": "no critic scores"}
-{"id": "t48", "question": "How much revenue did we make in January 2006?", "expect": "not_found", "why": "payments only Feb-May 2007"}
+{"id": "t48", "question": "How many rentals were made in June 2006?", "expect": "not_found", "why": "rentals end 2006-02-14"}
 {"id": "t49", "question": "What are the phone numbers of our suppliers?", "expect": "not_found", "why": "no suppliers"}
 {"id": "t50", "question": "How many films are available for streaming online?", "expect": "not_found", "why": "no streaming data"}
 {"id": "t51", "question": "Which films won an Oscar?", "expect": "not_found", "why": "no awards"}

@@ -30,6 +30,9 @@ class GenerateSQL(dspy.Signature):
       for rentals of its inventory (payment -> rental -> inventory.store_id), as in the sales_by_store
       view; customer.store_id is only the customer's home store. film.rental_rate is the price of one rental, rental_duration is in days,
       length is in minutes. Mind the date ranges in the schema: there may be no data for the period asked.
+      If the period asked is outside a table's date range, the data does not cover it: do not query it
+      as if it were zero, and do not wrap sums or counts in COALESCE(..., 0). Query the date range of
+      the table instead (min/max of its date column) so the answer can say what the data covers.
     - Durations between timestamps: EXTRACT(EPOCH FROM (end_ts - start_ts)) / 86400 for days (or / 3600
       for hours). Do not use EXTRACT(DAY FROM interval): it drops the hours.
     - Match names and titles case-insensitively (ILIKE). Return readable columns (names, titles) plus the
@@ -60,7 +63,10 @@ class AnswerQuestion(dspy.Signature):
     """Answer the question about the DVD rental database using ONLY the provided sources.
     Cite every claim with its source id in square brackets, e.g. [Q1] for a SQL result or [S2] for a
     film search hit. Use the numbers exactly as in the results; state units (USD, days, minutes) and
-    periods. When results are tied, say so and list the tied items. If a result reached the row limit
+    periods. When results are tied, say so and list the tied items. For "top N" / "N shortest" style
+    questions, if items beyond the Nth have the same value as the Nth, the top N is cut inside a tie:
+    say so and list every tied item (or say how many are tied if there are many), not just N of them.
+    A period outside the date range of the data has no data; say that, do not report it as 0. If a result reached the row limit
     or shows fewer rows than it has, say the list is partial. If the sources do not contain the answer,
     say what is missing instead of guessing. If the question asks for an exact figure the data does not
     have (e.g. the revenue for a month with no payments), say so first, then give the closest related

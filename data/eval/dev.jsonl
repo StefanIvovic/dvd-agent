@@ -52,3 +52,5 @@
 {"id": "d52", "question": "Why did store 3 make the least revenue?", "expect": "correction", "contains": ["only two", "only 2", "two stores", "2 stores", "no store 3", "does not exist", "doesn't exist", "not exist"], "why": "there are only 2 stores"}
 {"id": "d53", "question": "Why are most of our films in French?", "expect": "correction", "contains": ["English"], "why": "all films are English"}
 {"id": "d54", "question": "Which of Gina Degeneres' 60 films was rented the most?", "expect": "correction", "contains": ["42"], "why": "she acted in 42 films"}
+{"id": "d55", "question": "What are the 3 shortest films?", "expect": "answer", "gold_sql": "SELECT title, length FROM film ORDER BY length ASC FETCH FIRST 3 ROWS WITH TIES", "text_col": "title", "why": "ties at 46 minutes; moved from test (t28) after a fix"}
+{"id": "d56", "question": "How much revenue did we make in January 2006?", "expect": "not_found", "why": "payments only Feb-May 2007; moved from test (t48) after a fix"}
