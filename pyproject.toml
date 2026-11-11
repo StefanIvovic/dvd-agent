@@ -1,0 +1,33 @@
+[project]
+name = "dvd-agent"
+version = "0.1.0"
+description = "Q&A agent over the dvdrental sample database: text-to-SQL + semantic film search (LangGraph, DSPy, LlamaIndex, Postgres pgvector + pg_search, MLflow, Prefect, FastAPI, Streamlit)"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=1.2",
+    "dspy>=3.4,<3.5",          # tested with 3.4
+    "anthropic>=2.8",
+    "llama-index-core>=0.14",
+    "llama-index-embeddings-openai-like>=0.4",
+    "mlflow==3.18.0",          # keep in sync with the MLflow server image tag
+    "prefect>=3.9,<4",
+    "fastapi",
+    "uvicorn[standard]",
+    "streamlit",
+    "pandas",
+    "psycopg[binary,pool]>=3.3",
+    "pgvector>=0.5",
+    "sqlglot>=27",
+    "pydantic-settings",
+    "httpx",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dvd_agent = ["api/*.html"]

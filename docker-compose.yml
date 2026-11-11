@@ -1,0 +1,50 @@
+name: dvd-agent
+
+# Ports differ from sec-10k-agent (5433/5000/4200) so both stacks can run at once.
+services:
+  # ParadeDB = PostgreSQL + pgvector + pg_search (BM25)
+  postgres:
+    image: paradedb/paradedb:0.26.5-pg18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dvd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dvd}
+      POSTGRES_DB: ${POSTGRES_DB:-dvdrental}
+    ports:
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql   # PG 18+ layout
+      # first start only: restore the sample database, then add the agent's role, embeddings and BM25 index
+      - ./database/dvdrental.tar:/seed/dvdrental.tar:ro
+      - ./sql/01-restore.sh:/docker-entrypoint-initdb.d/01-restore.sh:ro
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/99-dvd-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dvd} -d ${POSTGRES_DB:-dvdrental}"]
+      interval: 5s
+      retries: 30
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.18.0
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --serve-artifacts
+    ports:
+      - "5001:5000"
+    volumes:
+      - mlflow_data:/mlflow
+
+  prefect:
+    image: prefecthq/prefect:3.9.2-python3.12
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_UI_API_URL: http://127.0.0.1:4201/api
+    ports:
+      - "4201:4200"
+    volumes:
+      - prefect_data:/root/.prefect
+
+volumes:
+  pg_data:
+  mlflow_data:
+  prefect_data:
