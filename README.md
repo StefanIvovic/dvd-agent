@@ -67,6 +67,8 @@ streamlit run src/dvd_agent/ui/streamlit_app.py     # Streamlit UI (needs the AP
 API: `POST /ask` with `{"question": "..."}`; also `/schema`, `/stats`, `/sync`, `/health`. Traces of every question are in MLflow at http://127.0.0.1:5001.
 
 The agent's SQL runs as the `dvd_reader` role: SELECT only, read-only transactions, 10 s timeout.
+It has no access to staff usernames and passwords, street addresses, postal codes or phone numbers
+(column grants in `sql/init.sql`).
 
 ## Data changes
 
