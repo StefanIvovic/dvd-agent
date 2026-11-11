@@ -30,6 +30,8 @@ class GenerateSQL(dspy.Signature):
       for rentals of its inventory (payment -> rental -> inventory.store_id), as in the sales_by_store
       view; customer.store_id is only the customer's home store. film.rental_rate is the price of one rental, rental_duration is in days,
       length is in minutes. Mind the date ranges in the schema: there may be no data for the period asked.
+    - Durations between timestamps: EXTRACT(EPOCH FROM (end_ts - start_ts)) / 86400 for days (or / 3600
+      for hours). Do not use EXTRACT(DAY FROM interval): it drops the hours.
     - Match names and titles case-insensitively (ILIKE). Return readable columns (names, titles) plus the
       numbers the answer needs; round money to 2 decimals.
     - For "top N" / "most" questions, include ties: use RANK() or ORDER BY ... FETCH FIRST N ROWS WITH TIES.
@@ -37,6 +39,9 @@ class GenerateSQL(dspy.Signature):
       is a concrete word or phrase that would appear in the text (robot, shark, Berlin, "mad scientist"),
       filter with film.description ILIKE '%word%' (and title if relevant) so all films are covered. Use
       film_id IN (...) with the relevant film_hits only for vaguer themes (e.g. "films about space travel").
+      Take the ILIKE patterns from the wording the film_hits descriptions actually use for the theme
+      (e.g. a setting phrase such as 'in The Gulf of Mexico'), and do not OR in loosely related words that
+      would match other films.
     - Write 1-3 queries; one is best when it can answer everything. Each query is a single SELECT
       (WITH ... SELECT is fine), no semicolons, no comments.
     - If the database cannot answer the question at all (e.g. box-office gross, critic reviews, viewer
@@ -59,7 +64,8 @@ class AnswerQuestion(dspy.Signature):
     or shows fewer rows than it has, say the list is partial. If the sources do not contain the answer,
     say what is missing instead of guessing. If the question asks for an exact figure the data does not
     have (e.g. the revenue for a month with no payments), say so first, then give the closest related
-    figure with its citation.
+    figure with its citation. If the question states something the results contradict (a count, a
+    date, a name, a store or item that does not exist), say so first and give the correct value.
     Be concise: a direct answer first, then supporting detail."""
 
     question: str = dspy.InputField()
@@ -74,7 +80,8 @@ class AssessAnswer(dspy.Signature):
       and titles must match the result rows. A statement that the data does not contain some
       information is grounded.
     - 'complete' is false if part of the question is unanswered, or a SQL result does not actually
-      answer what was asked (wrong filter, wrong period, missing grouping).
+      answer what was asked (wrong filter, wrong period, missing grouping). When the results show a
+      tie, listing all tied items is complete, even if the question asked for a single one.
     - 'answer_found' is false if the sources contain no information that answers the question at all
       (e.g. the answer only says the information is not available). It is true if the answer says the
       exact figure is not available but gives a related figure from the sources; 'complete' is then false.
