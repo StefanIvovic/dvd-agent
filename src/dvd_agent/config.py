@@ -1,10 +1,13 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # the project's .env (also when started from another folder), then ./.env
+    model_config = SettingsConfigDict(env_file=(Path(__file__).resolve().parents[2] / ".env", ".env"),
+                                      extra="ignore")
 
     llm_provider: str = "lmstudio"      # lmstudio | openai | anthropic
     llm_base_url: str = "http://127.0.0.1:1234/v1"   # not localhost: Windows tries ::1 first (+2.3 s per connection)
@@ -32,7 +35,10 @@ class Settings(BaseSettings):
     postgres_reader_dsn: str = "postgresql://dvd_reader:dvd_reader@127.0.0.1:5434/dvdrental"
     mlflow_tracking_uri: str = "http://127.0.0.1:5001"
     mlflow_experiment: str = "dvd-agent"
+    mlflow_ui_url: str = ""                  # MLflow address for trace links, if it differs from the tracking URI (Docker)
     api_url: str = "http://127.0.0.1:8001"   # used by the Streamlit UI
+    mcp_token: str = ""                      # MCP over HTTP: if set, clients must send "Authorization: Bearer <token>"
+    mcp_allowed_hosts: str = ""              # MCP over HTTP: extra Host header values, comma-separated (e.g. "myhost:8002")
 
     page_size: int = 50                  # rows per page; the answer step sees page 1, the user can ask for any page
     sql_retries: int = 2                 # regenerate the SQL with the error message this many times

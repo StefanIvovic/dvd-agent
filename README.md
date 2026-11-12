@@ -76,6 +76,27 @@ The agent's SQL runs as the `dvd_reader` role: SELECT only, read-only transactio
 It has no access to staff usernames and passwords, street addresses, postal codes or phone numbers
 (column grants in `sql/init.sql`).
 
+## MCP server
+
+The agent as tools for Claude Code, Claude Desktop or any MCP client: `ask` (the agent, with its
+self-check and follow-ups), `page` (more pages of a list), `run_sql` (your own read-only SELECT),
+`search_films` and `schema`.
+
+```bash
+docker compose up -d --build mcp        # HTTP at http://127.0.0.1:8002/mcp
+claude mcp add --transport http dvd-agent http://127.0.0.1:8002/mcp
+```
+
+Or without Docker, started by the client over stdio:
+
+```bash
+claude mcp add dvd-agent -- <path to repo>/.venv/Scripts/python -m dvd_agent.mcp_server   # macOS/Linux: .venv/bin/python
+```
+
+The container uses LM Studio on the host; bge-m3 must already be loaded there (`lms ps`). It is published on
+127.0.0.1 only. To reach it from other machines, publish the port wider and set `MCP_TOKEN` in `.env`
+(clients send `Authorization: Bearer <token>`).
+
 ## Data changes
 
 Questions always run against the live data, and new tables or columns are picked up within 5 minutes.

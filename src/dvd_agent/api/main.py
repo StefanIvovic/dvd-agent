@@ -20,7 +20,7 @@ from ..agent.graph import ask, get_agent
 from ..config import get_settings
 from ..db import postgres as pg
 from ..llm import ensure_embed_model_loaded
-from ..tracing import init_mlflow
+from ..tracing import init_mlflow, trace_url
 
 log = logging.getLogger("dvd_agent.api")
 DEPLOYMENT = "sync-embeddings/sync-embeddings"
@@ -59,19 +59,9 @@ def ask_endpoint(req: AskRequest) -> dict:
     # sync endpoint -> FastAPI runs it in a worker thread; LangGraph + DSPy calls are blocking
     result = ask(req.question, req.conversation_id or uuid.uuid4().hex)
     result["trace_id"] = trace_id = mlflow.get_last_active_trace_id()
-    result["trace_url"] = _trace_url(trace_id)
+    result["trace_url"] = trace_url(trace_id)
     return result
 
-
-def _trace_url(trace_id: str | None) -> str | None:
-    if not trace_id:
-        return None
-    s = get_settings()
-    try:
-        exp = mlflow.get_experiment_by_name(s.mlflow_experiment)
-    except Exception:
-        return None
-    return exp and f"{s.mlflow_tracking_uri}/#/experiments/{exp.experiment_id}/traces?traceId={trace_id}"
 
 
 @app.get("/schema", response_class=PlainTextResponse)

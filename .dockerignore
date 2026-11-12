@@ -1,0 +1,11 @@
+.venv/
+.env
+.git/
+.streamlit/
+database/
+data/
+artifacts/
+mlruns/
+logs/
+**/__pycache__/
+*.egg-info/

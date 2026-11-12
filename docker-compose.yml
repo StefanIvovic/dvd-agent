@@ -29,6 +29,7 @@ services:
       --backend-store-uri sqlite:////mlflow/mlflow.db
       --artifacts-destination /mlflow/artifacts
       --serve-artifacts
+      --allowed-hosts localhost,localhost:*,127.0.0.1,127.0.0.1:*,mlflow,mlflow:5000
     ports:
       - "5001:5000"
     volumes:
@@ -43,6 +44,34 @@ services:
       - "4201:4200"
     volumes:
       - prefect_data:/root/.prefect
+
+  # The agent as an MCP server: http://127.0.0.1:8002/mcp (docker compose up -d --build mcp).
+  # Chat model and embeddings stay in LM Studio on the host (host.docker.internal); bge-m3 must
+  # already be loaded there (the container cannot run `lms load`).
+  mcp:
+    build: .
+    image: dvd-agent-mcp
+    env_file:
+      - path: .env          # chat model settings (LLM_PROVIDER, LLM_MODEL, keys, MCP_TOKEN)
+        required: false
+    environment:            # container addresses override the host ones in .env
+      POSTGRES_DSN: postgresql://${POSTGRES_USER:-dvd}:${POSTGRES_PASSWORD:-dvd}@postgres:5432/${POSTGRES_DB:-dvdrental}
+      POSTGRES_READER_DSN: postgresql://dvd_reader:dvd_reader@postgres:5432/${POSTGRES_DB:-dvdrental}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_UI_URL: http://127.0.0.1:5001
+      PREFECT_API_URL: http://prefect:4200/api
+      LLM_BASE_URL: http://host.docker.internal:1234/v1    # used only with LLM_PROVIDER=lmstudio
+      EMBED_BASE_URL: http://host.docker.internal:1234/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8002:8002"   # this machine only; for other machines publish it wider and set MCP_TOKEN
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   pg_data:

@@ -125,9 +125,35 @@ def get_embedder() -> OpenAILikeEmbedding:
     )
 
 
+_embed_ok_at = 0.0
+
+
+def _require_embed_loaded() -> None:
+    """Never let an embedding request JIT-load the model (LM Studio would use its defaults and may unload
+    the chat model). Where `lms` can't load it (Docker), fail with a clear message instead. Checked at
+    most once a minute."""
+    global _embed_ok_at
+    if time.time() - _embed_ok_at < 60:
+        return
+    s = get_settings()
+    try:
+        models = httpx.get(f"{s.embed_base_url.rsplit('/v1', 1)[0]}/api/v0/models", timeout=5).json()["data"]
+    except Exception:
+        return   # not LM Studio's API (or unreachable): let the request itself report the error
+    if not any(m["id"] == s.embed_model and m.get("state") == "loaded" for m in models):
+        ensure_embed_model_loaded()
+        models = httpx.get(f"{s.embed_base_url.rsplit('/v1', 1)[0]}/api/v0/models", timeout=5).json()["data"]
+        if not any(m["id"] == s.embed_model and m.get("state") == "loaded" for m in models):
+            raise RuntimeError(f"{s.embed_model} is not loaded in LM Studio. Load it on the host: "
+                               f"lms load {s.embed_model} --gpu off -c {s.embed_context} --identifier {s.embed_model}")
+    _embed_ok_at = time.time()
+
+
 def embed_query(text: str) -> list[float]:
+    _require_embed_loaded()
     return _serialized(get_embedder().get_query_embedding, text)
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
+    _require_embed_loaded()
     return _serialized(get_embedder().get_text_embedding_batch, texts)

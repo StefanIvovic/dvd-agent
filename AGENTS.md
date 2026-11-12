@@ -17,6 +17,9 @@ Follow README.md for setup. Notes that matter when you drive it:
 - Health: `GET /health` reports postgres, embeddings_current, llm and embed_model_loaded.
 - The agent's SQL runs as `dvd_reader` (read-only). Don't weaken that role or the guard in
   `agent/sql_guard.py` to make a question work.
+- MCP server: `docker compose up -d --build mcp`, then `http://127.0.0.1:8002/mcp`. The container can't
+  load models: bge-m3 must be loaded in LM Studio on the host first (it refuses to embed otherwise,
+  rather than trigger a JIT load). Ask the user for `MCP_TOKEN`; don't make one up.
 - Evals take about 1 h with a local 27B model (`python -m dvd_agent.eval.run --split dev`). Ask before
   running them; with a cloud model they cost money.
 - Do not change files in data/eval/ to make an eval pass.

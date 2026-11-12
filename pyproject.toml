@@ -20,6 +20,7 @@ dependencies = [
     "sqlglot>=27",
     "pydantic-settings",
     "httpx",
+    "mcp>=2.3,<3",             # MCP server (mcp_server.py); 2.x renamed FastMCP to MCPServer
 ]
 
 [build-system]
