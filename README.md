@@ -16,6 +16,13 @@ Stack: LangGraph, DSPy, LlamaIndex, PostgreSQL (pgvector + pg_search), MLflow, P
 
 ## Setup
 
+Download the [sample database](https://neon.com/postgresql/getting-started/sample-database) into `database/`:
+
+```bash
+curl -L -o database/dvdrental.zip https://neon.com/postgresqltutorial/dvdrental.zip
+tar -xf database/dvdrental.zip -C database      # Linux: unzip database/dvdrental.zip -d database
+```
+
 ```bash
 docker compose up -d     # Postgres :5434 (restores database/dvdrental.tar on first start), MLflow :5001, Prefect :4201
 

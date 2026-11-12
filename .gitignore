@@ -9,3 +9,7 @@ eval_results/
 .vscode/
 logs_*.out
 logs_*.err
+
+# sample database: download it (README, Setup)
+database/*.tar
+database/*.zip

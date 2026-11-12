@@ -3,7 +3,7 @@
 Follow README.md for setup. Notes that matter when you drive it:
 
 - Services: `docker compose up -d`. Check with `docker compose ps` (postgres must be healthy) and
-  `curl http://127.0.0.1:5001` (MLflow). The first start restores `database/dvdrental.tar`; to restore
+  `curl http://127.0.0.1:5001` (MLflow). The first start restores `database/dvdrental.tar` (not in git: download it as in the README); to restore
   again, `docker compose down -v` (deletes the data) and start again.
 - LM Studio must serve bge-m3 (embeddings) for every setup. Check: `lms ps`. The app loads it on the CPU
   at startup if missing. Never load a model with a JIT request: it can unload the other model.
