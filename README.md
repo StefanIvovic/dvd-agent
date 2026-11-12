@@ -60,8 +60,8 @@ lms load qwen3.8-27b --gpu max -c 30976 --identifier qwen3.8-27b
 
 ```bash
 python -m dvd_agent.cli "Which film category brought in the most revenue in April 2007?"
-uvicorn dvd_agent.api.main:app --port 8001          # web UI at http://127.0.0.1:8001
-streamlit run src/dvd_agent/ui/streamlit_app.py     # Streamlit UI (needs the API running)
+uvicorn dvd_agent.api.main:app --port 8001          # API, docs at http://127.0.0.1:8001/docs
+streamlit run src/dvd_agent/ui/streamlit_app.py     # UI at http://127.0.0.1:8501 (needs the API running)
 ```
 
 Long lists are paged, 50 rows per page: the answer shows page 1 and the page count. Then ask "page 2",

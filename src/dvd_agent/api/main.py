@@ -1,4 +1,6 @@
-"""FastAPI service.  uvicorn dvd_agent.api.main:app --port 8001"""
+"""FastAPI service (no web page: the UI is Streamlit).  uvicorn dvd_agent.api.main:app --port 8001
+
+Interactive API docs at /docs."""
 from __future__ import annotations
 
 import logging
@@ -6,12 +8,11 @@ import os
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import mlflow
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from ..agent import schema
@@ -57,8 +58,20 @@ class AskRequest(BaseModel):
 def ask_endpoint(req: AskRequest) -> dict:
     # sync endpoint -> FastAPI runs it in a worker thread; LangGraph + DSPy calls are blocking
     result = ask(req.question, req.conversation_id or uuid.uuid4().hex)
-    result["trace_id"] = mlflow.get_last_active_trace_id()
+    result["trace_id"] = trace_id = mlflow.get_last_active_trace_id()
+    result["trace_url"] = _trace_url(trace_id)
     return result
+
+
+def _trace_url(trace_id: str | None) -> str | None:
+    if not trace_id:
+        return None
+    s = get_settings()
+    try:
+        exp = mlflow.get_experiment_by_name(s.mlflow_experiment)
+    except Exception:
+        return None
+    return exp and f"{s.mlflow_tracking_uri}/#/experiments/{exp.experiment_id}/traces?traceId={trace_id}"
 
 
 @app.get("/schema", response_class=PlainTextResponse)
@@ -114,6 +127,6 @@ def health() -> dict:
     return checks
 
 
-@app.get("/", response_class=HTMLResponse)
-def index() -> str:
-    return (Path(__file__).parent / "index.html").read_text(encoding="utf-8")
+@app.get("/", include_in_schema=False)
+def index() -> RedirectResponse:
+    return RedirectResponse("/docs")
