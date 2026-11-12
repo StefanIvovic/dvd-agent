@@ -5,7 +5,16 @@ sample database (films, actors, customers, stores, rentals, payments) and get an
 It writes read-only SQL, finds films by plot or theme (hybrid BM25 + vector search), checks its own answer,
 and says "not in the data" instead of guessing.
 
-Stack: LangGraph, DSPy, LlamaIndex, PostgreSQL (pgvector + pg_search), MLflow, Prefect, FastAPI, Streamlit.
+Stack: LangGraph, DSPy, LlamaIndex, PostgreSQL (pgvector + pg_search), MLflow, Prefect, FastAPI, Streamlit, MCP.
+
+## How it works
+
+1. A follow-up ("who acts in it?") is rewritten into a standalone question from the conversation.
+2. Plot or theme questions search the film descriptions (BM25 + vectors) for matching films.
+3. The model writes SQL from the live schema; a guard checks it and it runs as a read-only role. Errors go back to the model.
+4. The answer cites every SQL result it uses ([Q1], [S1]); a self-check compares it with the results and asks for
+   another query if it is incomplete, or corrects a false premise in the question.
+5. Answers the data can't support become "not in the data". Each step is traced in MLflow.
 
 ## Requirements
 
@@ -16,11 +25,11 @@ Stack: LangGraph, DSPy, LlamaIndex, PostgreSQL (pgvector + pg_search), MLflow, P
 
 ## Setup
 
-Download the [sample database](https://neon.com/postgresql/getting-started/sample-database) into `database/`:
+Download the [sample database](https://neon.com/postgresql/getting-started/sample-database) into `database/`
+before the first `docker compose up` (Postgres restores it only when its data volume is new):
 
 ```bash
-curl -L -o database/dvdrental.zip https://neon.com/postgresqltutorial/dvdrental.zip
-tar -xf database/dvdrental.zip -C database      # Linux: unzip database/dvdrental.zip -d database
+python -c "import io, urllib.request, zipfile; zipfile.ZipFile(io.BytesIO(urllib.request.urlopen('https://neon.com/postgresqltutorial/dvdrental.zip').read())).extractall('database')"
 ```
 
 ```bash
@@ -76,8 +85,11 @@ Long lists are paged, 50 rows per page: the answer shows page 1 and the page cou
 page"). Each page runs the query again (no cached rows) and is printed straight from the database. In the CLI,
 start without a question for a conversation: `python -m dvd_agent.cli`.
 
+Follow-up questions use the last 3 turns of the conversation ("which of them are rated R?"). The Streamlit UI has
+a Manual page, and a developer mode that shows the SQL, the steps and the MLflow trace of each answer.
+
 API: `POST /ask` with `{"question": "...", "conversation_id": "..."}` (send back the `conversation_id` of the
-previous answer to page its list); also `/schema`, `/stats`, `/sync`, `/health`. Traces of every question are in MLflow at http://127.0.0.1:5001.
+previous answer for follow-ups and paging); also `/schema`, `/stats`, `/sync`, `/health`. Traces of every question are in MLflow at http://127.0.0.1:5001.
 
 The agent's SQL runs as the `dvd_reader` role: SELECT only, read-only transactions, 10 s timeout.
 It has no access to staff usernames and passwords, street addresses, postal codes or phone numbers
@@ -126,6 +138,8 @@ pytest          # ~20 s, no LLM; tests marked db need Postgres running and are s
 python -m dvd_agent.eval.run --split dev
 python -m dvd_agent.eval.run --split test
 ```
+
+About 15-20 minutes per split with the local model.
 
 The questions are in `data/eval/` ([format](data/eval/README.md)); expected values come from SQL run at eval time.
 
