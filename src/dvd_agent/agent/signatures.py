@@ -51,6 +51,9 @@ class GenerateSQL(dspy.Signature):
       Take the ILIKE patterns from the wording the film_hits descriptions actually use for the theme
       (e.g. a setting phrase such as 'in The Gulf of Mexico'), and do not OR in loosely related words that
       would match other films.
+    - If the question states a fact as given (a count such as "her 60 films", a total, a date, a store or
+      item that should exist), add a query that checks it (e.g. count her films), so the answer can
+      confirm or correct it.
     - Write 1-3 queries; one is best when it can answer everything. Each query is a single SELECT
       (WITH ... SELECT is fine), no semicolons, no comments.
     - If the database cannot answer the question at all (e.g. box-office gross, critic reviews, viewer
@@ -83,6 +86,7 @@ class AnswerQuestion(dspy.Signature):
 
     question: str = dspy.InputField()
     sources: str = dspy.InputField(desc="[Q#] SQL statements with result tables, [S#] film search hits")
+    review: str = dspy.InputField(desc="problems a reviewer found in an earlier draft; fix them. Empty on the first draft")
     answer: str = dspy.OutputField(desc="markdown answer with [Q#]/[S#] citations")
 
 
@@ -96,11 +100,21 @@ class AssessAnswer(dspy.Signature):
       answer what was asked (wrong filter, wrong period, missing grouping). When the results show a
       tie, listing all tied items is complete, even if the question asked for a single one. A paged
       result ("page 1 shown") is complete when the answer gives the total and lists page 1: the user
-      can ask for every other page, so never ask a new query for the remaining rows or pages.
+      can ask for every other page, so never ask a new query for the remaining rows or pages. A count or
+      list of films by plot, theme or setting is complete when its query filters the description on the
+      wording the descriptions use for that theme (e.g. ILIKE '%in A U-Boat%' for "set on a submarine"):
+      the database has no setting or theme field, so that is the best answer it can give. Do not mark it
+      incomplete for that reason, and do not ask for broader or related keywords.
     - 'answer_found' is false if the sources contain no information that answers the question at all
       (e.g. the answer only says the information is not available). It is true if the answer says the
       exact figure is not available but gives a related figure from the sources; 'complete' is then false.
-    - If not grounded or not complete, say in follow_up what a new query should compute."""
+    - If not grounded or not complete, say in follow_up what a new query should compute.
+    - 'premise_conflict': if the question states as fact a number, date, name or the existence of
+      something (e.g. "her 60 films", "store 3", "since 2010") that the sources contradict, and the
+      answer does not point that out, write what the question says and what the sources show (e.g.
+      "the question says 60 films; [Q2] counts 42"). Only when a source shows a different value: empty
+      if the question states no such fact, no source checks it, the sources agree with it, or the
+      answer already corrects it."""
 
     question: str = dspy.InputField()
     sources: str = dspy.InputField()
@@ -110,6 +124,7 @@ class AssessAnswer(dspy.Signature):
     answer_found: bool = dspy.OutputField()
     missing: str = dspy.OutputField(desc="what is missing or unsupported; empty if nothing")
     follow_up: str = dspy.OutputField(desc="what a new SQL query should compute, if not grounded or not complete; else empty")
+    premise_conflict: str = dspy.OutputField(desc="a fact stated in the question that the sources contradict and the answer did not correct; else empty")
 
 
 class DvdQAProgram(dspy.Module):

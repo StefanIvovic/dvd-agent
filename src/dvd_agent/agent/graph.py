@@ -14,7 +14,7 @@
         └────┬─────┘
              ▼
         ┌──────────┐  DSPy: grounded/complete? ── no & budget left ──► refine (sql with follow_up) ─► answer
-        │ assess   │
+        │ assess   │  false premise not corrected (premise_conflict) ──► revise (same sources) ─► answer
         └────┬─────┘
              ▼
           finalize ──► END
@@ -51,6 +51,7 @@ class AgentState(TypedDict, total=False):
     refinements: int
     status: str                  # answered | partial | not_found (set by finalize)
     paged: dict                  # {"qid", "result"}: the cited result with more than one page, if any
+    review: str                  # self-check note for a rewrite (premise_conflict), else empty
     draft_answer: str            # LLM answer before finalize; kept for traces, never shown if not_found
     steps: Annotated[list[dict], operator.add]
 
@@ -129,7 +130,7 @@ def build_graph(program: DvdQAProgram | None = None):
     def answer(state: AgentState) -> dict:
         t0 = time.time()
         text, cmap = tools.format_sources(state.get("results", []), state.get("films", []))
-        p = program.answer(question=state["question"], sources=text)
+        p = program.answer(question=state["question"], sources=text, review=state.get("review", ""))
         return {"answer": p.answer, "answer_reasoning": p.reasoning, "sources_text": text, "citation_map": cmap,
                 **_step("answer", t0)}
 
@@ -137,15 +138,31 @@ def build_graph(program: DvdQAProgram | None = None):
         t0 = time.time()
         r = program.assess(question=state["question"], sources=state["sources_text"], answer=state["answer"])
         a = {"grounded": bool(r.grounded), "complete": bool(r.complete), "answer_found": bool(r.answer_found),
-             "missing": r.missing or "", "follow_up": r.follow_up or ""}
+             "missing": r.missing or "", "follow_up": r.follow_up or "",
+             "premise_conflict": (r.premise_conflict or "").strip()}
         return {"assessment": a, **_step("assess", t0, **a)}
 
     def after_assess(state: AgentState) -> str:
         a = state["assessment"]
         ok = a["grounded"] and a["complete"] and a["answer_found"]
-        if not ok and state.get("refinements", 0) < settings.max_refinements:
-            return "refine"
+        if state.get("refinements", 0) < settings.max_refinements:
+            if not ok:
+                return "refine"
+            if a.get("premise_conflict"):   # right data, but the answer goes along with a false premise
+                return "revise"
         return "finalize"
+
+    def _review(a: dict) -> str:
+        c = a.get("premise_conflict")
+        return (f"The question states something the sources contradict: {c}. Say so in the first sentence, "
+                "with the correct value and its citation, then answer.") if c else ""
+
+    def revise(state: AgentState) -> dict:
+        """Rewrite the answer (same sources, no new SQL) with the self-check's note."""
+        t0 = time.time()
+        review = _review(state["assessment"])
+        return {"review": review, "refinements": state.get("refinements", 0) + 1,
+                **_step("revise", t0, review=review)}
 
     def refine(state: AgentState) -> dict:
         t0 = time.time()
@@ -153,7 +170,7 @@ def build_graph(program: DvdQAProgram | None = None):
         need = a["follow_up"] or a["missing"]
         previous = _summary(state.get("results", [])) + f"\n\nThe answer from these results is incomplete: {need}"
         out = run_sql_round(state, previous)
-        return {**out, "refinements": state.get("refinements", 0) + 1,
+        return {**out, "refinements": state.get("refinements", 0) + 1, "review": _review(a),
                 **_step("refine", t0, need=need, queries=[r["sql"] for r in out["results"]],
                         errors=[r["error"] for r in out["results"] if "error" in r] or None)}
 
@@ -200,15 +217,16 @@ def build_graph(program: DvdQAProgram | None = None):
 
     g = StateGraph(AgentState)
     for name, fn in [("analyze", analyze), ("film_search", film_search), ("sql", sql), ("answer", answer),
-                     ("assess", assess), ("refine", refine), ("finalize", finalize)]:
+                     ("assess", assess), ("refine", refine), ("revise", revise), ("finalize", finalize)]:
         g.add_node(name, fn)
     g.add_edge(START, "analyze")
     g.add_conditional_edges("analyze", route, ["film_search", "sql"])
     g.add_edge("film_search", "sql")
     g.add_conditional_edges("sql", after_sql, ["answer", "finalize"])
     g.add_edge("answer", "assess")
-    g.add_conditional_edges("assess", after_assess, ["refine", "finalize"])
+    g.add_conditional_edges("assess", after_assess, ["refine", "revise", "finalize"])
     g.add_edge("refine", "answer")
+    g.add_edge("revise", "answer")
     g.add_edge("finalize", END)
     return g.compile()
 
