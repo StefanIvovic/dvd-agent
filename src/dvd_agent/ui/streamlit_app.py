@@ -55,6 +55,8 @@ def chart(df: pd.DataFrame) -> None:
 def show(d: dict) -> None:
     label, color = LABELS.get(d["status"], (d["status"], "gray"))
     st.markdown(f":{color}-badge[{label}]")
+    if d.get("standalone_question"):
+        st.caption(f"Understood as: {d['standalone_question']}")
     st.markdown(d["answer"])
     page_reply = any(s.get("node") == "page" for s in d.get("steps", []))  # rows are already in the answer
     for c in d.get("citations", []):

@@ -15,6 +15,9 @@ Line format (see data/eval/README.md):
   follow_ups  expect=pages: paging requests in the same conversation, e.g.
               [{"say": "20 per page", "pages": [1], "size": 20}, {"say": "pages 3, 5", "pages": [3, 5]}]
   size        expect=pages: rows per page the question itself asks for (default 50)
+  context     expect=answer/not_found/correction: earlier questions asked first in the same conversation,
+              e.g. ["What is the most rented movie?"]; only the last question ("Which actors are in it?")
+              is graded
   id, why     notes for you; not used for scoring
 """
 from __future__ import annotations
@@ -102,6 +105,12 @@ def _check_row(r: dict) -> list[str]:
                 out.append(f"follow_up {f!r} needs 'say' and 'pages' (page numbers)")
     elif any(k in r for k in ("gold_sql", "text_col", "number_col")):
         out.append("'gold_sql', 'text_col' and 'number_col' only go with expect=answer or pages")
+    if "context" in r:
+        c = r["context"]
+        if e == "pages":
+            out.append("expect=pages takes no 'context' (use 'follow_ups')")
+        elif not (isinstance(c, list) and c and all(isinstance(q, str) and q.strip() for q in c)):
+            out.append("'context' must be a non-empty list of earlier questions")
     if e == "correction" and not r.get("contains"):
         out.append("expect=correction needs 'contains' (words that show the premise was corrected)")
     if e == "not_found" and "contains" in r:

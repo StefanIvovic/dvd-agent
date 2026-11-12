@@ -21,6 +21,8 @@ def show(res: dict, as_json: bool) -> None:
         print()
         return
     print(f"[{res['status']}]")
+    if res.get("standalone_question"):
+        print(f"(understood as: {res['standalone_question']})")
     print(res["answer"], "\n")
     if res["plan"] and res["plan"].get("page_request"):   # pages are printed straight from the rows
         print("Steps:", " -> ".join(f"{s['node']}({s['seconds']}s)" for s in res["steps"]))

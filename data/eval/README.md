@@ -17,6 +17,7 @@ python -m dvd_agent.eval.run --split test --run-name test-v1
 {"question": "Which customer has spent the most?", "expect": "answer", "gold_sql": "SELECT ... AS name, sum(amount) AS v ...", "text_col": "name", "number_col": "v"}
 {"question": "Who directed Ace Goldfinger?", "expect": "not_found", "why": "no director column"}
 {"question": "Why did store 3 make the least revenue?", "expect": "correction", "contains": ["only two", "no store 3"]}
+{"context": ["What is the most rented movie?"], "question": "Which actors are in it?", "expect": "answer", "gold_sql": "...", "text_col": "name"}
 {"question": "List all customers of store 2.", "expect": "pages", "gold_sql": "SELECT first_name || ' ' || last_name AS name FROM customer WHERE store_id = 2", "text_col": "name", "follow_ups": [{"say": "20 per page", "pages": [1], "size": 20}, {"say": "pages 3, 5", "pages": [3, 5]}]}
 ```
 
@@ -30,6 +31,7 @@ python -m dvd_agent.eval.run --split test --run-name test-v1
 | `tolerance` | no | Relative tolerance for numbers (default 0.005; 0.01 absolute for small values). |
 | `contains` | `correction` | At least one phrase must appear, e.g. "only two". |
 | `follow_ups` | no (`pages`) | Paging requests: `say` is sent, `pages` are the page numbers it should return, `size` the rows per page from then on (default: unchanged). |
+| `context` | no (not `pages`) | Earlier questions, asked first in the same conversation; only `question` is graded. Its gold_sql must stand alone (e.g. find the most rented film itself). |
 | `size` | no (`pages`) | Rows per page the question itself asks for (default 50). |
 | `id`, `why` | no | Notes; not scored. |
 
@@ -52,6 +54,7 @@ together be the gold list. The order is the agent's: any order passes.
 | `false_refusal_rate` | `answer` lines where the agent said "not found" |
 | `made_up_rate` | `not_found` lines where the agent invented an answer |
 | `correction_pass_rate` | false premises refused or corrected |
+| `followup_pass_rate` | lines with `context` (follow-up questions) answered correctly |
 | `pages_pass_rate` | `pages` lines (list and every follow-up page) correct |
 | `sql_error_rate` | runs where at least one SQL attempt failed (and was retried) |
 | `*_consistency` | same result on every repeat |

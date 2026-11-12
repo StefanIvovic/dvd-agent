@@ -5,7 +5,8 @@ python -m dvd_agent.eval.run --split test --run-name test-v1
 python -m dvd_agent.eval.run --split dev --expect not_found --limit 5
 
 Each question is answered once (not_found / correction questions --repeats times, default 3, to
-check the agent refuses reliably; --repeat-all repeats every question). Expected values come from each line's gold_sql, run at eval time.
+check the agent refuses reliably; --repeat-all repeats every question). A line with "context" asks
+those questions first in the same conversation and grades only its own question (followup_pass_rate). Expected values come from each line's gold_sql, run at eval time.
 """
 from __future__ import annotations
 
@@ -71,7 +72,7 @@ def main() -> None:
         for n, (r, rep) in enumerate(runs, 1):
             t0 = time.time()
             base = {"line": r["line"], "id": r.get("id", ""), "question": r["question"], "expect": r["expect"],
-                    "repeat": rep}
+                    "repeat": rep, "followup": bool(r.get("context"))}
             try:
                 if r["expect"] == "pages":   # the question, then each follow-up in the same conversation
                     conv = uuid.uuid4().hex
@@ -79,9 +80,14 @@ def main() -> None:
                     ok, reason = check_pages(r, turns)
                     res = {**turns[0], "answer": "\n\n---\n\n".join(t["answer"] for t in turns),
                            "sql": [q for t in turns for q in t["sql"]]}
-                else:
-                    res = ask(r["question"])
+                else:            # earlier turns first (context), then the graded question
+                    conv = uuid.uuid4().hex
+                    for q in r.get("context", []):
+                        ask(q, conv)
+                    res = ask(r["question"], conv)
                     ok, reason = check(r, res["answer"], res["status"])
+                    if res.get("standalone_question"):
+                        reason = (reason + " | " if reason else "") + f"understood as: {res['standalone_question']}"
                 sql = " ;; ".join(q["sql"] for q in res["sql"] if "error" not in q)
                 out.append({**base, "status": res["status"], "passed": ok, "reason": reason,
                             "cited": has_citation(res["answer"]), "seconds": round(time.time() - t0, 1),
@@ -120,6 +126,9 @@ def summarize(df: pd.DataFrame) -> dict:
         m["cited_rate"] = ans["cited"].mean()
         if ans["repeat"].nunique() > 1:
             m["answer_consistency"] = ans.groupby("question")["passed"].nunique().eq(1).mean()
+    fu = df[df["followup"]]
+    if len(fu):
+        m["followup_pass_rate"] = fu["passed"].mean()
     pg_ = df[df["expect"] == "pages"]
     if len(pg_):
         m["pages_pass_rate"] = pg_["passed"].mean()

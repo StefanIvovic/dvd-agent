@@ -8,6 +8,22 @@ import dspy
 from ..config import get_settings
 
 
+class ContextualizeQuestion(dspy.Signature):
+    """Rewrite the user's latest message in a conversation about a DVD rental database as a standalone
+    question that can be answered without the conversation.
+
+    - Replace references to earlier turns ("this movie", "them", "that store", "the second one", "the
+      same for 2006", "and for Horror?") with the names, titles, values or filters they refer to,
+      taken from the conversation.
+    - If the message is already a complete question, or starts a new topic, return it unchanged.
+    - Keep the user's wording, numbers and premises as they are, even if they look wrong. Do not answer
+      the question, and add no facts, filters or limits the user did not ask for."""
+
+    conversation: str = dspy.InputField(desc="earlier turns, oldest first")
+    message: str = dspy.InputField(desc="the user's latest message")
+    question: str = dspy.OutputField(desc="the standalone question")
+
+
 class AnalyzeQuestion(dspy.Signature):
     """Plan how to answer a question about a DVD rental business database (films, actors, categories,
     customers, stores, staff, inventory, rentals, payments).
@@ -132,6 +148,7 @@ class DvdQAProgram(dspy.Module):
 
     def __init__(self):
         super().__init__()
+        self.contextualize = dspy.Predict(ContextualizeQuestion)
         self.analyze = dspy.Predict(AnalyzeQuestion)
         # ChainOfThought: a hidden scratchpad before the SQL / the answer (qwen's thinking is off)
         self.sql = dspy.ChainOfThought(GenerateSQL)

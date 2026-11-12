@@ -1,5 +1,7 @@
 """LangGraph agent.
 
+     contextualize   DSPy, only for a follow-up in a conversation: rewrite it as a standalone question
+             ▼
         ┌──────────┐
         │ analyze  │  DSPy: does the question need film search (plot/theme)?
         └────┬─────┘
@@ -31,12 +33,14 @@ from langgraph.graph import END, START, StateGraph
 
 from ..config import get_settings
 from ..llm import configure_dspy
-from . import paging, schema, tools
+from . import memory, paging, schema, tools
 from .signatures import DvdQAProgram, load_program
 
 
 class AgentState(TypedDict, total=False):
-    question: str
+    question: str                # standalone question the agent answers (the rewrite of a follow-up)
+    message: str                 # what the user typed, if it was rewritten
+    history: str                 # earlier turns of the conversation (agent/memory.py), empty if none
     page_size: int               # rows per page if the question asked for one ("20 per page"), else PAGE_SIZE
     plan: dict
     films: list[dict]
@@ -80,6 +84,17 @@ def build_graph(program: DvdQAProgram | None = None):
     configure_dspy()
     program = program or load_program()
     settings = get_settings()
+
+    def contextualize(state: AgentState) -> dict:
+        """A follow-up ("what actors are in this movie?") becomes a standalone question. No LLM call
+        without history."""
+        if not state.get("history"):
+            return {}
+        t0 = time.time()
+        message = state["question"]
+        q = (program.contextualize(conversation=state["history"], message=message).question or "").strip()
+        q = q or message
+        return {"question": q, "message": message, **_step("contextualize", t0, question=q)}
 
     def analyze(state: AgentState) -> dict:
         t0 = time.time()
@@ -211,15 +226,17 @@ def build_graph(program: DvdQAProgram | None = None):
                 paged = {"qid": hit["id"], "result": hit}
                 final = final + "\n\n" + paging.footer(hit, hit["id"])
         reason = ",".join(reasons)
-        _tag_trace(state["question"], status, reason, not_in_src, a, state.get("refinements", 0), cannot)
+        _tag_trace(state["question"], status, reason, not_in_src, a, state.get("refinements", 0), cannot,
+                   state.get("message", ""))
         return {"status": status, "answer": final, "draft_answer": draft, "paged": paged,
                 **_step("finalize", t0, status=status, reason=reason or None, not_in_sources=not_in_src or None)}
 
     g = StateGraph(AgentState)
-    for name, fn in [("analyze", analyze), ("film_search", film_search), ("sql", sql), ("answer", answer),
+    for name, fn in [("contextualize", contextualize), ("analyze", analyze), ("film_search", film_search), ("sql", sql), ("answer", answer),
                      ("assess", assess), ("refine", refine), ("revise", revise), ("finalize", finalize)]:
         g.add_node(name, fn)
-    g.add_edge(START, "analyze")
+    g.add_edge(START, "contextualize")
+    g.add_edge("contextualize", "analyze")
     g.add_conditional_edges("analyze", route, ["film_search", "sql"])
     g.add_edge("film_search", "sql")
     g.add_conditional_edges("sql", after_sql, ["answer", "finalize"])
@@ -238,7 +255,7 @@ PARTIAL_NOTE = ("_Note: part of this question could not be answered from the dat
 
 
 def _tag_trace(question: str, status: str, reason: str, not_in_sources: str, assessment: dict,
-               refinements: int, cannot_answer: str) -> None:
+               refinements: int, cannot_answer: str, message: str = "") -> None:
     """Tag the MLflow trace so unanswered questions can be found: tags.answer_status = 'not_found'.
 
     status_reason (comma-separated if several):
@@ -257,6 +274,7 @@ def _tag_trace(question: str, status: str, reason: str, not_in_sources: str, ass
             "complete": str(assessment.get("complete")),
             "refinements": str(refinements),
             "question": question[:250],
+            "user_message": message[:250],   # what the user typed, when a follow-up was rewritten
             "missing": (assessment.get("missing") or "")[:500],
         })
     except Exception:  # tracing off or no active trace: never break the answer
@@ -284,8 +302,10 @@ def ask(question: str, conversation_id: str | None = None) -> dict[str, Any]:
         return {"question": question, "conversation_id": conversation_id,
                 **_traced_page_request(cmd, conversation_id, question)}
     llm_question, size = paging.split_question(question)
-    state = get_agent().invoke({"question": llm_question, **({"page_size": size} if size else {})})
+    state = get_agent().invoke({"question": llm_question, "history": memory.history(conversation_id),
+                                **({"page_size": size} if size else {})})
     status = state.get("status", "answered")
+    memory.add(conversation_id, state["question"], state.get("answer", ""), status)
     paged = state.get("paged")
     if paged:
         paging.remember(conversation_id, paged["result"], paged["qid"], question)
@@ -293,6 +313,9 @@ def ask(question: str, conversation_id: str | None = None) -> dict[str, Any]:
         paging.forget(conversation_id)   # a new question without pages: "page 2" no longer refers to the old list
     return {
         "question": question,
+        # the follow-up as the agent understood it; None if the question was used as typed
+        "standalone_question": state["question"] if state.get("message") and state["question"] != llm_question
+        else None,
         "conversation_id": conversation_id,
         "status": status,   # answered | partial | not_found
         "answer": state.get("answer", ""),
