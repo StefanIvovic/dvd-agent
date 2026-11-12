@@ -20,6 +20,7 @@ Follow README.md for setup. Notes that matter when you drive it:
 - MCP server: `docker compose up -d --build mcp`, then `http://127.0.0.1:8002/mcp`. The container can't
   load models: bge-m3 must be loaded in LM Studio on the host first (it refuses to embed otherwise,
   rather than trigger a JIT load). Ask the user for `MCP_TOKEN`; don't make one up.
+- After a code change, run `pytest` (~20 s, no LLM). Keep it passing; add a test for a bug you fix.
 - Evals take about 1 h with a local 27B model (`python -m dvd_agent.eval.run --split dev`). Ask before
   running them; with a cloud model they cost money.
 - Do not change files in data/eval/ to make an eval pass.

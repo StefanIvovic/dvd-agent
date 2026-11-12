@@ -23,6 +23,13 @@ dependencies = [
     "mcp>=2.3,<3",             # MCP server (mcp_server.py); 2.x renamed FastMCP to MCPServer
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["db: needs the Postgres container (skipped when it is not reachable)"]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

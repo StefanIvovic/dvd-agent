@@ -113,6 +113,13 @@ Film embeddings follow edits: new or changed films are embedded by the sync flow
 python -m dvd_agent.sync.flows --serve     # Prefect deployment, runs every 10 minutes (UI: http://127.0.0.1:4201)
 ```
 
+## Tests
+
+```bash
+pip install -e ".[dev]"
+pytest          # ~20 s, no LLM; tests marked db need Postgres running and are skipped without it
+```
+
 ## Evaluate
 
 ```bash

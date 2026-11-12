@@ -6,15 +6,14 @@ with the citations as superscripts, the data when it adds something to the answe
 under "How this was computed". Developer mode adds the steps, the MLflow trace, failed SQL
 attempts and how a follow-up was understood.
 """
-import re
 from pathlib import Path
 
 import httpx
 import pandas as pd
-import sqlglot
 import streamlit as st
 
 from dvd_agent.config import get_settings
+from dvd_agent.ui.format import pretty_sql, sup, with_superscripts
 
 API = get_settings().api_url
 EXAMPLES = ["Which film category brought in the most revenue in April 2007?",
@@ -23,29 +22,6 @@ EXAMPLES = ["Which film category brought in the most revenue in April 2007?",
             "How much revenue did we make in January 2006?"]
 LABELS = {"answered": ("answered", "green"), "partial": ("partly answered", "orange"),
           "not_found": ("not in the data", "red")}
-SUP = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
-CITATION = re.compile(r"\s?\[((?:[QS]\d+\s*,\s*)*[QS]\d+)\]")
-
-
-def sup(n: int) -> str:
-    return str(n).translate(SUP)
-
-
-def with_superscripts(answer: str, numbers: dict[str, int]) -> str:
-    """[Q1] -> ¹, [Q1, S2] -> ¹˒², numbered in the order the sources are listed below the answer."""
-    def repl(m: re.Match) -> str:
-        ids = [i for i in re.split(r"\s*,\s*", m.group(1)) if i in numbers]
-        return "˒".join(sup(numbers[i]) for i in ids)
-    return CITATION.sub(repl, answer)
-
-
-def pretty_sql(sql: str) -> str:
-    try:
-        return sqlglot.transpile(sql, read="postgres", write="postgres", pretty=True)[0]
-    except Exception:
-        return sql
-
-
 def chart(df: pd.DataFrame) -> None:
     """Bar chart for (label, number) results with 2-30 rows."""
     num = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and not c.endswith("_id")]
