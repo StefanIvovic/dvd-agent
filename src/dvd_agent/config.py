@@ -46,7 +46,9 @@ class Settings(BaseSettings):
     max_refinements: int = 1             # extra SQL round when the self-check says incomplete
     schema_cache_seconds: int = 300      # schema text is re-read from information_schema after this
     sync_interval_minutes: int = 10
-    compiled_program_path: str = "artifacts/compiled_program.json"
+    # The DSPy program with tuned prompts. Empty: the one in the package (agent/compiled_program.json,
+    # few-shot SQL examples, see README "Optimization"). "none": the untuned prompts. Or a path.
+    compiled_program_path: str = ""
 
     @property
     def max_tokens(self) -> int:

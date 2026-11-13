@@ -25,3 +25,6 @@ Follow README.md for setup. Notes that matter when you drive it:
 - Evals take 15-20 min per split with a local 27B model (`python -m dvd_agent.eval.run --split dev`). Ask before
   running them; with a cloud model they cost money.
 - Do not change files in data/eval/ to make an eval pass.
+- The SQL step runs with tuned few-shot examples (`src/dvd_agent/agent/compiled_program.json`). After
+  changing a signature, re-run `python -m dvd_agent.optimize` (README, Optimization) or set
+  `COMPILED_PROGRAM_PATH=none`: old examples can disagree with new instructions. Compile on dev only.

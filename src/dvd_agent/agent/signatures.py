@@ -156,9 +156,18 @@ class DvdQAProgram(dspy.Module):
         self.assess = dspy.Predict(AssessAnswer)
 
 
+PACKAGED_PROGRAM = Path(__file__).with_name("compiled_program.json")
+
+
 def load_program() -> DvdQAProgram:
+    """The program the agent runs: COMPILED_PROGRAM_PATH, or the packaged tuned one by default.
+    "none" gives the untuned prompts. A path that doesn't exist is an error, not a silent fallback."""
     program = DvdQAProgram()
-    path = Path(get_settings().compiled_program_path)
-    if path.exists():
-        program.load(str(path))
+    setting = get_settings().compiled_program_path.strip()
+    if setting.lower() == "none":
+        return program
+    path = Path(setting) if setting else PACKAGED_PROGRAM
+    if not path.exists():
+        raise FileNotFoundError(f"COMPILED_PROGRAM_PATH {path} not found (use 'none' for the untuned prompts)")
+    program.load(str(path))
     return program

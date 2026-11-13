@@ -1,0 +1,221 @@
+{
+  "contextualize": {
+    "traces": [],
+    "train": [],
+    "demos": [],
+    "signature": {
+      "instructions": "Rewrite the user's latest message in a conversation about a DVD rental database as a standalone\nquestion that can be answered without the conversation.\n\n- Replace references to earlier turns (\"this movie\", \"them\", \"that store\", \"the second one\", \"the\n  same for 2006\", \"and for Horror?\") with the names, titles, values or filters they refer to,\n  taken from the conversation.\n- If the message is already a complete question, or starts a new topic, return it unchanged.\n- Keep the user's wording, numbers and premises as they are, even if they look wrong. Do not answer\n  the question, and add no facts, filters or limits the user did not ask for.",
+      "fields": [
+        {
+          "prefix": "Conversation:",
+          "description": "earlier turns, oldest first"
+        },
+        {
+          "prefix": "Message:",
+          "description": "the user's latest message"
+        },
+        {
+          "prefix": "Question:",
+          "description": "the standalone question"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "analyze": {
+    "traces": [],
+    "train": [],
+    "demos": [],
+    "signature": {
+      "instructions": "Plan how to answer a question about a DVD rental business database (films, actors, categories,\ncustomers, stores, staff, inventory, rentals, payments).\n\nFilm search finds films by what they are about (plot, themes, characters, setting) using the\ntitle and description text, e.g. \"films about a robot\" or \"movies set in a shark tank\". It is\nnot needed for questions that name a title, actor, category, rating or a number.",
+      "fields": [
+        {
+          "prefix": "Question:",
+          "description": "${question}"
+        },
+        {
+          "prefix": "Needs Film Search:",
+          "description": "true only if films must be found by plot/theme/description"
+        },
+        {
+          "prefix": "Film Search Queries:",
+          "description": "1-2 short queries describing the plot/theme; [] if no film search"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "sql.predict": {
+    "traces": [],
+    "train": [],
+    "demos": [
+      {
+        "augmented": true,
+        "question": "How many customers are currently active?",
+        "db_schema": "table actor, ~200 rows: actor_id integer PK, first_name varchar, last_name varchar, last_update timestamp\nview actor_info: actor_id integer, first_name varchar, last_name varchar, film_info text\ntable address, ~603 rows: address_id integer PK, district varchar, city_id smallint -> city.city_id, last_update timestamp\ntable category, ~16 rows: category_id integer PK, name varchar (values: Action, Animation, Children, Classics, Comedy, Documentary, Drama, Family, Foreign, Games, Horror, Music, New, Sci-Fi, Sports, Travel), last_update timestamp\ntable city, ~600 rows: city_id integer PK, city varchar, country_id smallint -> country.country_id, last_update timestamp\ntable country, ~109 rows: country_id integer PK, country varchar, last_update timestamp\ntable customer, ~599 rows: customer_id integer PK, store_id smallint, first_name varchar, last_name varchar, address_id smallint -> address.address_id, activebool boolean, create_date date, last_update timestamp, active integer\ntable film, ~1000 rows: film_id integer PK, title varchar, description text, release_year integer, language_id smallint -> language.language_id, rental_duration smallint, rental_rate numeric, length smallint, replacement_cost numeric, rating mpaa_rating (G, PG, PG-13, R, NC-17), last_update timestamp, special_features text[]\ntable film_actor, ~5462 rows: actor_id smallint PK -> actor.actor_id, film_id smallint PK -> film.film_id, last_update timestamp\ntable film_category, ~1000 rows: film_id smallint PK -> film.film_id, category_id smallint PK -> category.category_id, last_update timestamp\nview film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable inventory, ~4581 rows: inventory_id integer PK, film_id smallint -> film.film_id, store_id smallint, last_update timestamp\ntable language, ~6 rows: language_id integer PK, name character (values: English, French, German, Italian, Japanese, Mandarin), last_update timestamp\nview nicer_but_slower_film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable payment, ~14596 rows: payment_id integer PK, customer_id smallint -> customer.customer_id, staff_id smallint -> staff.staff_id, rental_id integer -> rental.rental_id, amount numeric, payment_date timestamp (from 2007-02-14 to 2007-05-14)\ntable rental, ~16044 rows: rental_id integer PK, rental_date timestamp (from 2005-05-24 to 2006-02-14), inventory_id integer -> inventory.inventory_id, customer_id smallint -> customer.customer_id, return_date timestamp, staff_id smallint -> staff.staff_id, last_update timestamp\nview sales_by_film_category: category varchar, total_sales numeric\nview sales_by_store: store text, manager text, total_sales numeric\ntable staff, ~2 rows: staff_id integer PK, first_name varchar, last_name varchar, address_id smallint -> address.address_id, store_id smallint, active boolean, last_update timestamp\ntable store, ~2 rows: store_id integer PK, manager_staff_id smallint -> staff.staff_id, address_id smallint -> address.address_id, last_update timestamp",
+        "film_hits": "[]",
+        "previous_attempts": "",
+        "reasoning": "The question asks for the count of customers who are currently active. Looking at the `customer` table schema, there is a column `active` (listed as `active integer` in the schema description, though typically a boolean in this dataset, the schema explicitly says `active integer` and also lists `activebool boolean` which seems like a typo or duplicate in the provided schema text, but standard Sakila schema uses `active` as a boolean/integer flag). The standard column is `active`. I will count the rows where `active` is true (or 1).",
+        "queries": [
+          "SELECT COUNT(*) AS active_customer_count FROM customer WHERE active = 1"
+        ],
+        "cannot_answer": ""
+      },
+      {
+        "augmented": true,
+        "question": "How many films mention a shark in their description?",
+        "db_schema": "table actor, ~200 rows: actor_id integer PK, first_name varchar, last_name varchar, last_update timestamp\nview actor_info: actor_id integer, first_name varchar, last_name varchar, film_info text\ntable address, ~603 rows: address_id integer PK, district varchar, city_id smallint -> city.city_id, last_update timestamp\ntable category, ~16 rows: category_id integer PK, name varchar (values: Action, Animation, Children, Classics, Comedy, Documentary, Drama, Family, Foreign, Games, Horror, Music, New, Sci-Fi, Sports, Travel), last_update timestamp\ntable city, ~600 rows: city_id integer PK, city varchar, country_id smallint -> country.country_id, last_update timestamp\ntable country, ~109 rows: country_id integer PK, country varchar, last_update timestamp\ntable customer, ~599 rows: customer_id integer PK, store_id smallint, first_name varchar, last_name varchar, address_id smallint -> address.address_id, activebool boolean, create_date date, last_update timestamp, active integer\ntable film, ~1000 rows: film_id integer PK, title varchar, description text, release_year integer, language_id smallint -> language.language_id, rental_duration smallint, rental_rate numeric, length smallint, replacement_cost numeric, rating mpaa_rating (G, PG, PG-13, R, NC-17), last_update timestamp, special_features text[]\ntable film_actor, ~5462 rows: actor_id smallint PK -> actor.actor_id, film_id smallint PK -> film.film_id, last_update timestamp\ntable film_category, ~1000 rows: film_id smallint PK -> film.film_id, category_id smallint PK -> category.category_id, last_update timestamp\nview film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable inventory, ~4581 rows: inventory_id integer PK, film_id smallint -> film.film_id, store_id smallint, last_update timestamp\ntable language, ~6 rows: language_id integer PK, name character (values: English, French, German, Italian, Japanese, Mandarin), last_update timestamp\nview nicer_but_slower_film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable payment, ~14596 rows: payment_id integer PK, customer_id smallint -> customer.customer_id, staff_id smallint -> staff.staff_id, rental_id integer -> rental.rental_id, amount numeric, payment_date timestamp (from 2007-02-14 to 2007-05-14)\ntable rental, ~16044 rows: rental_id integer PK, rental_date timestamp (from 2005-05-24 to 2006-02-14), inventory_id integer -> inventory.inventory_id, customer_id smallint -> customer.customer_id, return_date timestamp, staff_id smallint -> staff.staff_id, last_update timestamp\nview sales_by_film_category: category varchar, total_sales numeric\nview sales_by_store: store text, manager text, total_sales numeric\ntable staff, ~2 rows: staff_id integer PK, first_name varchar, last_name varchar, address_id smallint -> address.address_id, store_id smallint, active boolean, last_update timestamp\ntable store, ~2 rows: store_id integer PK, manager_staff_id smallint -> staff.staff_id, address_id smallint -> address.address_id, last_update timestamp",
+        "film_hits": "[{\"film_id\": 543, \"title\": \"Madigan Dorado\", \"description\": \"A Astounding Character Study of a A Shark And a A Shark who must Discover a Crocodile in The Outback\"}, {\"film_id\": 849, \"title\": \"Storm Happiness\", \"description\": \"A Insightful Drama of a Feminist And a A Shark who must Vanquish a Boat in A Shark Tank\"}, {\"film_id\": 434, \"title\": \"Horror Reign\", \"description\": \"A Touching Documentary of a A Shark And a Car who must Build a Husband in Nigeria\"}, {\"film_id\": 476, \"title\": \"Jason Trap\", \"description\": \"A Thoughtful Tale of a Woman And a A Shark who must Conquer a Dog in A Monastery\"}, {\"film_id\": 349, \"title\": \"Gangs Pride\", \"description\": \"A Taut Character Study of a Woman And a A Shark who must Confront a Frisbee in Berlin\"}, {\"film_id\": 839, \"title\": \"Stallion Sundance\", \"description\": \"A Fast-Paced Tale of a Car And a Dog who must Outgun a A Shark in Australia\"}, {\"film_id\": 259, \"title\": \"Duck Racer\", \"description\": \"A Lacklusture Yarn of a Teacher And a Squirrel who must Overcome a Dog in A Shark Tank\"}, {\"film_id\": 832, \"title\": \"Splash Gump\", \"description\": \"A Taut Saga of a Crocodile And a Boat who must Conquer a Hunter in A Shark Tank\"}, {\"film_id\": 302, \"title\": \"Fantasia Park\", \"description\": \"A Thoughtful Documentary of a Mad Scientist And a A Shark who must Outrace a Feminist in Australia\"}, {\"film_id\": 862, \"title\": \"Summer Scarface\", \"description\": \"A Emotional Panorama of a Lumberjack And a Hunter who must Meet a Girl in A Shark Tank\"}]",
+        "previous_attempts": "",
+        "reasoning": "The question asks for the count of films that mention a shark in their description. \"Shark\" is a concrete word that appears in the film descriptions (as seen in the film_hits). I should use an ILIKE filter on film.description to catch all films mentioning \"shark\" (case-insensitive), not just the top 10 hits. I'll count them.",
+        "queries": [
+          "SELECT COUNT(*) AS shark_film_count FROM film WHERE description ILIKE '%shark%'"
+        ],
+        "cannot_answer": ""
+      },
+      {
+        "augmented": true,
+        "question": "Which actor appeared in the most films about a crocodile?",
+        "db_schema": "table actor, ~200 rows: actor_id integer PK, first_name varchar, last_name varchar, last_update timestamp\nview actor_info: actor_id integer, first_name varchar, last_name varchar, film_info text\ntable address, ~603 rows: address_id integer PK, district varchar, city_id smallint -> city.city_id, last_update timestamp\ntable category, ~16 rows: category_id integer PK, name varchar (values: Action, Animation, Children, Classics, Comedy, Documentary, Drama, Family, Foreign, Games, Horror, Music, New, Sci-Fi, Sports, Travel), last_update timestamp\ntable city, ~600 rows: city_id integer PK, city varchar, country_id smallint -> country.country_id, last_update timestamp\ntable country, ~109 rows: country_id integer PK, country varchar, last_update timestamp\ntable customer, ~599 rows: customer_id integer PK, store_id smallint, first_name varchar, last_name varchar, address_id smallint -> address.address_id, activebool boolean, create_date date, last_update timestamp, active integer\ntable film, ~1000 rows: film_id integer PK, title varchar, description text, release_year integer, language_id smallint -> language.language_id, rental_duration smallint, rental_rate numeric, length smallint, replacement_cost numeric, rating mpaa_rating (G, PG, PG-13, R, NC-17), last_update timestamp, special_features text[]\ntable film_actor, ~5462 rows: actor_id smallint PK -> actor.actor_id, film_id smallint PK -> film.film_id, last_update timestamp\ntable film_category, ~1000 rows: film_id smallint PK -> film.film_id, category_id smallint PK -> category.category_id, last_update timestamp\nview film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable inventory, ~4581 rows: inventory_id integer PK, film_id smallint -> film.film_id, store_id smallint, last_update timestamp\ntable language, ~6 rows: language_id integer PK, name character (values: English, French, German, Italian, Japanese, Mandarin), last_update timestamp\nview nicer_but_slower_film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable payment, ~14596 rows: payment_id integer PK, customer_id smallint -> customer.customer_id, staff_id smallint -> staff.staff_id, rental_id integer -> rental.rental_id, amount numeric, payment_date timestamp (from 2007-02-14 to 2007-05-14)\ntable rental, ~16044 rows: rental_id integer PK, rental_date timestamp (from 2005-05-24 to 2006-02-14), inventory_id integer -> inventory.inventory_id, customer_id smallint -> customer.customer_id, return_date timestamp, staff_id smallint -> staff.staff_id, last_update timestamp\nview sales_by_film_category: category varchar, total_sales numeric\nview sales_by_store: store text, manager text, total_sales numeric\ntable staff, ~2 rows: staff_id integer PK, first_name varchar, last_name varchar, address_id smallint -> address.address_id, store_id smallint, active boolean, last_update timestamp\ntable store, ~2 rows: store_id integer PK, manager_staff_id smallint -> staff.staff_id, address_id smallint -> address.address_id, last_update timestamp",
+        "film_hits": "[{\"film_id\": 675, \"title\": \"Phantom Glory\", \"description\": \"A Beautiful Documentary of a Astronaut And a Crocodile who must Discover a Madman in A Monastery\"}, {\"film_id\": 588, \"title\": \"Model Fish\", \"description\": \"A Beautiful Panorama of a Boat And a Crocodile who must Outrace a Dog in Australia\"}, {\"film_id\": 219, \"title\": \"Deep Crusade\", \"description\": \"A Amazing Tale of a Crocodile And a Squirrel who must Discover a Composer in Australia\"}, {\"film_id\": 752, \"title\": \"Runner Madigan\", \"description\": \"A Thoughtful Documentary of a Crocodile And a Robot who must Outrace a Womanizer in The Outback\"}, {\"film_id\": 536, \"title\": \"Lovely Jingle\", \"description\": \"A Fanciful Yarn of a Crocodile And a Forensic Psychologist who must Discover a Crocodile in The Outback\"}, {\"film_id\": 73, \"title\": \"Bingo Talented\", \"description\": \"A Touching Tale of a Girl And a Crocodile who must Discover a Waitress in Nigeria\"}, {\"film_id\": 234, \"title\": \"Disturbing Scarface\", \"description\": \"A Lacklusture Display of a Crocodile And a Butler who must Overcome a Monkey in A U-Boat\"}, {\"film_id\": 327, \"title\": \"Fool Mockingbird\", \"description\": \"A Lacklusture Tale of a Crocodile And a Composer who must Defeat a Madman in A U-Boat\"}, {\"film_id\": 701, \"title\": \"Psycho Shrunk\", \"description\": \"A Amazing Panorama of a Crocodile And a Explorer who must Fight a Husband in Nigeria\"}, {\"film_id\": 715, \"title\": \"Range Moonwalker\", \"description\": \"A Insightful Documentary of a Hunter And a Dentist who must Confront a Crocodile in A Baloon\"}]",
+        "previous_attempts": "",
+        "reasoning": "The question asks for the actor who appeared in the most films about a crocodile. \"Crocodile\" is a concrete word that appears in the film descriptions (as seen in the film_hits). I should filter films where the description contains \"Crocodile\" (case-insensitive). Then I need to join with film_actor and actor to count how many crocodile films each actor appeared in, and find the top actor(s) with ties.\n\nSteps:\n1. Filter films: film.description ILIKE '%crocodile%'\n2. Join film_actor to get actors in those films\n3. Join actor to get names\n4. Group by actor, count distinct films\n5. Order by count desc, use RANK() or FETCH FIRST 1 ROWS WITH TIES to include ties",
+        "queries": [
+          "SELECT a.first_name, a.last_name, COUNT(DISTINCT f.film_id) AS crocodile_films FROM film f JOIN film_actor fa ON f.film_id = fa.film_id JOIN actor a ON fa.actor_id = a.actor_id WHERE f.description ILIKE '%crocodile%' GROUP BY a.actor_id, a.first_name, a.last_name ORDER BY crocodile_films DESC FETCH FIRST 1 ROWS WITH TIES"
+        ],
+        "cannot_answer": ""
+      },
+      {
+        "augmented": true,
+        "question": "How many films are in the database?",
+        "db_schema": "table actor, ~200 rows: actor_id integer PK, first_name varchar, last_name varchar, last_update timestamp\nview actor_info: actor_id integer, first_name varchar, last_name varchar, film_info text\ntable address, ~603 rows: address_id integer PK, district varchar, city_id smallint -> city.city_id, last_update timestamp\ntable category, ~16 rows: category_id integer PK, name varchar (values: Action, Animation, Children, Classics, Comedy, Documentary, Drama, Family, Foreign, Games, Horror, Music, New, Sci-Fi, Sports, Travel), last_update timestamp\ntable city, ~600 rows: city_id integer PK, city varchar, country_id smallint -> country.country_id, last_update timestamp\ntable country, ~109 rows: country_id integer PK, country varchar, last_update timestamp\ntable customer, ~599 rows: customer_id integer PK, store_id smallint, first_name varchar, last_name varchar, address_id smallint -> address.address_id, activebool boolean, create_date date, last_update timestamp, active integer\ntable film, ~1000 rows: film_id integer PK, title varchar, description text, release_year integer, language_id smallint -> language.language_id, rental_duration smallint, rental_rate numeric, length smallint, replacement_cost numeric, rating mpaa_rating (G, PG, PG-13, R, NC-17), last_update timestamp, special_features text[]\ntable film_actor, ~5462 rows: actor_id smallint PK -> actor.actor_id, film_id smallint PK -> film.film_id, last_update timestamp\ntable film_category, ~1000 rows: film_id smallint PK -> film.film_id, category_id smallint PK -> category.category_id, last_update timestamp\nview film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable inventory, ~4581 rows: inventory_id integer PK, film_id smallint -> film.film_id, store_id smallint, last_update timestamp\ntable language, ~6 rows: language_id integer PK, name character (values: English, French, German, Italian, Japanese, Mandarin), last_update timestamp\nview nicer_but_slower_film_list: fid integer, title varchar, description text, category varchar, price numeric, length smallint, rating mpaa_rating (G, PG, PG-13, R, NC-17), actors text\ntable payment, ~14596 rows: payment_id integer PK, customer_id smallint -> customer.customer_id, staff_id smallint -> staff.staff_id, rental_id integer -> rental.rental_id, amount numeric, payment_date timestamp (from 2007-02-14 to 2007-05-14)\ntable rental, ~16044 rows: rental_id integer PK, rental_date timestamp (from 2005-05-24 to 2006-02-14), inventory_id integer -> inventory.inventory_id, customer_id smallint -> customer.customer_id, return_date timestamp, staff_id smallint -> staff.staff_id, last_update timestamp\nview sales_by_film_category: category varchar, total_sales numeric\nview sales_by_store: store text, manager text, total_sales numeric\ntable staff, ~2 rows: staff_id integer PK, first_name varchar, last_name varchar, address_id smallint -> address.address_id, store_id smallint, active boolean, last_update timestamp\ntable store, ~2 rows: store_id integer PK, manager_staff_id smallint -> staff.staff_id, address_id smallint -> address.address_id, last_update timestamp",
+        "film_hits": "[]",
+        "previous_attempts": "",
+        "reasoning": "The user wants to know the total number of films in the database. This is a simple count of the rows in the `film` table.",
+        "queries": [
+          "SELECT COUNT(*) AS film_count FROM film;"
+        ],
+        "cannot_answer": ""
+      }
+    ],
+    "signature": {
+      "instructions": "Write PostgreSQL SELECT queries that answer the question from the database schema.\n\n- Use only tables and columns in the schema. Prefer base tables over the *_list views.\n- Revenue/sales = SUM(payment.amount). A rental links to a film and a store through inventory\n  (rental.inventory_id -> inventory.film_id, inventory.store_id). A store's revenue is the payments\n  for rentals of its inventory (payment -> rental -> inventory.store_id), as in the sales_by_store\n  view; customer.store_id is only the customer's home store. film.rental_rate is the price of one rental, rental_duration is in days,\n  length is in minutes. Mind the date ranges in the schema: there may be no data for the period asked.\n  If the period asked is outside a table's date range, the data does not cover it: do not query it\n  as if it were zero, and do not wrap sums or counts in COALESCE(..., 0). Query the date range of\n  the table instead (min/max of its date column) so the answer can say what the data covers.\n- Durations between timestamps: EXTRACT(EPOCH FROM (end_ts - start_ts)) / 86400 for days (or / 3600\n  for hours). Do not use EXTRACT(DAY FROM interval): it drops the hours.\n- Match names and titles case-insensitively (ILIKE). Return readable columns (names, titles) plus the\n  numbers the answer needs; round money to 2 decimals.\n- For \"top N\" / \"most\" / \"least\" questions, include ties: use RANK() or ORDER BY <ranking value>\n  FETCH FIRST N ROWS WITH TIES. WITH TIES keeps only rows equal on every ORDER BY column, so order\n  by the ranking value alone (no name or title tie-breakers). Never use LIMIT N or FETCH ... ROWS\n  ONLY for them: that drops tied rows.\n- For lists (\"list all ...\", \"which films ...\"), return every matching row: do not add a LIMIT (the\n  user gets the rows page by page), ORDER BY a readable column (e.g. title or last name), and select\n  only the columns the question needs (titles or names, not descriptions unless asked).\n- film_hits are only the top matches of a plot/theme search, not every matching film. If the theme\n  is a concrete word or phrase that would appear in the text (robot, shark, Berlin, \"mad scientist\"),\n  filter with film.description ILIKE '%word%' (and title if relevant) so all films are covered. Use\n  film_id IN (...) with the relevant film_hits only for vaguer themes (e.g. \"films about space travel\").\n  Take the ILIKE patterns from the wording the film_hits descriptions actually use for the theme\n  (e.g. a setting phrase such as 'in The Gulf of Mexico'), and do not OR in loosely related words that\n  would match other films.\n- If the question states a fact as given (a count such as \"her 60 films\", a total, a date, a store or\n  item that should exist), add a query that checks it (e.g. count her films), so the answer can\n  confirm or correct it.\n- Write 1-3 queries; one is best when it can answer everything. Each query is a single SELECT\n  (WITH ... SELECT is fine), no semicolons, no comments.\n- If the database cannot answer the question at all (e.g. box-office gross, critic reviews, viewer\n  star ratings, streaming), return no queries and say why in cannot_answer.\n- If previous_attempts shows errors, fix them; if it says what is missing, write queries for that.",
+      "fields": [
+        {
+          "prefix": "Question:",
+          "description": "${question}"
+        },
+        {
+          "prefix": "Db Schema:",
+          "description": "tables/views with columns, PK, FK (->), enum and known values, date ranges"
+        },
+        {
+          "prefix": "Film Hits:",
+          "description": "films found by plot/theme search (JSON), or []"
+        },
+        {
+          "prefix": "Previous Attempts:",
+          "description": "earlier queries with their errors or results summary; empty on the first try"
+        },
+        {
+          "prefix": "Reasoning:",
+          "description": "${reasoning}"
+        },
+        {
+          "prefix": "Queries:",
+          "description": "SQL SELECT statements; [] if the database cannot answer"
+        },
+        {
+          "prefix": "Cannot Answer:",
+          "description": "why the database cannot answer; empty if queries are given"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "answer.predict": {
+    "traces": [],
+    "train": [],
+    "demos": [],
+    "signature": {
+      "instructions": "Answer the question about the DVD rental database using ONLY the provided sources.\nCite every claim with its source id in square brackets, e.g. [Q1] for a SQL result or [S2] for a\nfilm search hit. Use the numbers exactly as in the results; state units (USD, days, minutes) and\nperiods. When results are tied, say so and list the tied items. For \"top N\" / \"N shortest\" style\nquestions, if items beyond the Nth have the same value as the Nth, the top N is cut inside a tie:\nsay so and list every tied item (or say how many are tied if there are many), not just N of them.\nA period outside the date range of the data has no data; say that, do not report it as 0. If a result is paged (\"page 1 shown\"),\ngive the total row count and, for a list, list every row of page 1; a page note is added for the\nuser automatically, so do not call the list partial or incomplete. If the sources do not contain the answer,\nsay what is missing instead of guessing. If the question asks for an exact figure the data does not\nhave (e.g. the revenue for a month with no payments), say so first, then give the closest related\nfigure with its citation. If the question states something the results contradict (a count, a\ndate, a name, a store or item that does not exist), say so first and give the correct value.\nBe concise: a direct answer first, then supporting detail.",
+      "fields": [
+        {
+          "prefix": "Question:",
+          "description": "${question}"
+        },
+        {
+          "prefix": "Sources:",
+          "description": "[Q#] SQL statements with result tables, [S#] film search hits"
+        },
+        {
+          "prefix": "Review:",
+          "description": "problems a reviewer found in an earlier draft; fix them. Empty on the first draft"
+        },
+        {
+          "prefix": "Reasoning:",
+          "description": "${reasoning}"
+        },
+        {
+          "prefix": "Answer:",
+          "description": "markdown answer with [Q#]/[S#] citations"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "assess": {
+    "traces": [],
+    "train": [],
+    "demos": [],
+    "signature": {
+      "instructions": "Check a draft answer against its sources, claim by claim.\n\n- 'grounded' is false if ANY factual claim is not supported by the cited sources. Numbers, names\n  and titles must match the result rows. A statement that the data does not contain some\n  information is grounded.\n- 'complete' is false if part of the question is unanswered, or a SQL result does not actually\n  answer what was asked (wrong filter, wrong period, missing grouping). When the results show a\n  tie, listing all tied items is complete, even if the question asked for a single one. A paged\n  result (\"page 1 shown\") is complete when the answer gives the total and lists page 1: the user\n  can ask for every other page, so never ask a new query for the remaining rows or pages. A count or\n  list of films by plot, theme or setting is complete when its query filters the description on the\n  wording the descriptions use for that theme (e.g. ILIKE '%in A U-Boat%' for \"set on a submarine\"):\n  the database has no setting or theme field, so that is the best answer it can give. Do not mark it\n  incomplete for that reason, and do not ask for broader or related keywords.\n- 'answer_found' is false if the sources contain no information that answers the question at all\n  (e.g. the answer only says the information is not available). It is true if the answer says the\n  exact figure is not available but gives a related figure from the sources; 'complete' is then false.\n- If not grounded or not complete, say in follow_up what a new query should compute.\n- 'premise_conflict': if the question states as fact a number, date, name or the existence of\n  something (e.g. \"her 60 films\", \"store 3\", \"since 2010\") that the sources contradict, and the\n  answer does not point that out, write what the question says and what the sources show (e.g.\n  \"the question says 60 films; [Q2] counts 42\"). Only when a source shows a different value: empty\n  if the question states no such fact, no source checks it, the sources agree with it, or the\n  answer already corrects it.",
+      "fields": [
+        {
+          "prefix": "Question:",
+          "description": "${question}"
+        },
+        {
+          "prefix": "Sources:",
+          "description": "${sources}"
+        },
+        {
+          "prefix": "Answer:",
+          "description": "${answer}"
+        },
+        {
+          "prefix": "Grounded:",
+          "description": "${grounded}"
+        },
+        {
+          "prefix": "Complete:",
+          "description": "${complete}"
+        },
+        {
+          "prefix": "Answer Found:",
+          "description": "${answer_found}"
+        },
+        {
+          "prefix": "Missing:",
+          "description": "what is missing or unsupported; empty if nothing"
+        },
+        {
+          "prefix": "Follow Up:",
+          "description": "what a new SQL query should compute, if not grounded or not complete; else empty"
+        },
+        {
+          "prefix": "Premise Conflict:",
+          "description": "a fact stated in the question that the sources contradict and the answer did not correct; else empty"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "metadata": {
+    "dependency_versions": {
+      "python": "3.12",
+      "dspy": "3.4.1",
+      "cloudpickle": "3.1"
+    }
+  }
+}
